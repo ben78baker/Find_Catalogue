@@ -5,7 +5,7 @@
 - [x] Approved non-Flutter app icon installed for iOS, Android and macOS. Release master: `assets/branding/find_catalogue_icon_1024.png`.
 - [x] Publish the completed privacy policy at a public URL and provide an actual support URL/contact method.
 - [x] Add an easily accessible privacy-policy link inside the app once that URL is known.
-- [ ] Decide whether version 1.0 supports iPhone only or iPhone and iPad. The current Xcode target supports both.
+- [x] Version 1.0 is configured for iPhone only; iPad is not an App Store target.
 
 ## Privacy and policy
 
@@ -41,11 +41,17 @@
 - [ ] Validate the archive and inspect its privacy report.
 - [ ] Upload to App Store Connect and use internal TestFlight before review.
 
+## Google Play build
+
+- [x] Restrict Play distribution to Android small and normal screen classes; large and extra-large tablet classes are not declared compatible.
+- [ ] After uploading the first Android App Bundle, review the supported devices in Play Console's device catalogue and confirm tablets are excluded before rollout.
+- [ ] Test the release build on at least one physical Android phone, including denied camera/location permissions, map use, offline catalogue access, editing and all three share formats.
+
 ## Store assets
 
 - [ ] Capture one to ten screenshots using invented records and non-sensitive coordinates.
 - [ ] Supply the highest required iPhone screenshot size accepted by App Store Connect.
-- [ ] If iPad remains supported, also supply the required iPad screenshot set.
+- [x] No iPad screenshot set is required because version 1.0 is iPhone-only.
 - [ ] Do not show real finds, names, storage locations or exact private findspots.
 - [ ] Check the icon at small Home Screen and Settings sizes, not only at 1024 px.
 

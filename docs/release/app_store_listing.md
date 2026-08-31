@@ -74,4 +74,4 @@ Use invented demonstration records and non-sensitive coordinates only.
 5. Finds map — multiple invented demonstration markers.
 6. Sharing — privacy choice between hidden and exact locations.
 
-If the app remains universal, capture both the required current iPhone and iPad screenshot sets. If it becomes iPhone-only, change the target before creating the App Store record and screenshots.
+Version 1.0 is iPhone-only, so prepare the required current iPhone screenshot set; no iPad screenshot set is needed.

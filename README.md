@@ -6,11 +6,13 @@ The app begins with rapid discovery capture—a photograph, location, timestamp,
 
 See [the product brief](docs/product_brief.md) for the intended workflow and scope. Development agents must also follow [AGENTS.md](AGENTS.md).
 
-## Platforms
+## Release platforms
 
-- iOS
-- Android
+- iPhone (iOS)
+- Android phones
 - macOS
+
+The first mobile release is deliberately not distributed for iPad or Android tablet screen classes.
 
 ## Current status
 

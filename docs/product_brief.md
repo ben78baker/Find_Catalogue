@@ -6,6 +6,8 @@ Find Catalogue is a private research catalogue for objects discovered in the fie
 
 The app must accommodate coins, buttons, fittings, tools, fragments, unidentified objects, and other finds without forcing them into a narrow taxonomy.
 
+The first release targets iPhone, Android phones, and macOS. iPad and Android tablet screen classes are excluded from store distribution unless tablet support is deliberately designed and tested in a later release.
+
 ## Core workflow
 
 ### Opening screen
