@@ -65,6 +65,18 @@ class NewFindPhoto {
   final int sortOrder;
 }
 
+class FindPhotoUpdate {
+  const FindPhotoUpdate({
+    required this.id,
+    required this.role,
+    required this.sortOrder,
+  });
+
+  final int id;
+  final FindPhotoRole role;
+  final int sortOrder;
+}
+
 class FindDraft {
   const FindDraft({
     required this.method,

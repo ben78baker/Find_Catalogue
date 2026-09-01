@@ -47,6 +47,25 @@ void main() {
     expect(utf8.decode(bytes.take(4).toList()), '%PDF');
   });
 
+  test('PDF flows compact records together and paginates when full', () async {
+    final records = [
+      for (var id = 1; id <= 8; id++) _record(id, compact: true),
+    ];
+    final firstPageBytes = await exporter.buildPdf(
+      records.take(3).toList(),
+      findspotPrecision: FindspotExportPrecision.hidden,
+      compress: false,
+    );
+    final overflowBytes = await exporter.buildPdf(
+      records,
+      findspotPrecision: FindspotExportPrecision.hidden,
+      compress: false,
+    );
+
+    expect(_pdfPageCount(firstPageBytes), 1);
+    expect(_pdfPageCount(overflowBytes), greaterThan(1));
+  });
+
   test('hidden-location bundle strips photo GPS metadata', () async {
     final directory = await Directory.systemTemp.createTemp(
       'find_catalogue_bundle_',
@@ -135,6 +154,7 @@ FindRecord _record(
   int id, {
   String identification = 'Harness fitting',
   List<FindPhoto> photos = const [],
+  bool compact = false,
 }) {
   final now = DateTime(2026, 8, 30, 12);
   return FindRecord(
@@ -153,20 +173,25 @@ FindRecord _record(
       source: FieldSource.manuallyEntered,
     ),
     preferredIdentification: identification,
-    material: 'Copper alloy',
+    material: compact ? '' : 'Copper alloy',
     confidence: IdentificationConfidence.probable,
     timelineFromYear: -50,
     timelineToYear: 100,
-    lengthMm: 25,
-    widthMm: 14,
+    lengthMm: compact ? null : 25,
+    widthMm: compact ? null : 14,
     heightMm: null,
     diameterMm: null,
-    thicknessMm: 2,
-    weightG: 8.5,
-    observations: 'Regular diagonal grooves survive on the edge.',
-    researchNotes: 'Compared with a museum catalogue entry.',
-    sources: 'Example catalogue, p. 10',
-    storageLocation: 'Finds box 2',
+    thicknessMm: compact ? null : 2,
+    weightG: compact ? null : 8.5,
+    observations: compact
+        ? ''
+        : 'Regular diagonal grooves survive on the edge.',
+    researchNotes: compact ? '' : 'Compared with a museum catalogue entry.',
+    sources: compact ? '' : 'Example catalogue, p. 10',
+    storageLocation: compact ? '' : 'Finds box 2',
     photos: photos,
   );
 }
+
+int _pdfPageCount(List<int> bytes) =>
+    RegExp(r'/Type\s*/Page\b').allMatches(latin1.decode(bytes)).length;

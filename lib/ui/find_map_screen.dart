@@ -65,15 +65,14 @@ class FindMapScreen extends StatelessWidget {
             ),
             children: [
               _tileLayer(),
-              MarkerLayer(
+              _CameraAnchoredMarkerLayer(
                 markers: [
                   for (final record in located)
-                    Marker(
+                    _CameraAnchoredMarker(
                       key: ValueKey('map_marker_${record.id}'),
                       point: _point(record.location!),
                       width: 52,
                       height: 56,
-                      alignment: Alignment.bottomCenter,
                       child: Semantics(
                         button: true,
                         label: '${record.logNumber}, ${record.displayTitle}',
@@ -165,7 +164,6 @@ class FindLocationPickerScreen extends StatefulWidget {
 }
 
 class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
-  final _mapController = MapController();
   late LatLng _selected;
   late bool _hasChosen;
 
@@ -174,12 +172,6 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
     super.initState();
     _hasChosen = isMappableLocation(widget.initialLocation);
     _selected = _hasChosen ? _point(widget.initialLocation!) : _overviewCenter;
-  }
-
-  @override
-  void dispose() {
-    _mapController.dispose();
-    super.dispose();
   }
 
   FindLocation get _result => FindLocation(
@@ -210,29 +202,42 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
       body: Stack(
         children: [
           FlutterMap(
-            mapController: _mapController,
+            key: const Key('location_picker_map'),
             options: MapOptions(
               initialCenter: _selected,
               initialZoom: _hasChosen ? 17 : 5.5,
               minZoom: 2,
               maxZoom: 19,
               onTap: (_, point) {
-                _mapController.move(point, _mapController.camera.zoom);
                 setState(() {
                   _selected = point;
-                  _hasChosen = true;
-                });
-              },
-              onPositionChanged: (camera, hasGesture) {
-                if (!hasGesture) return;
-                setState(() {
-                  _selected = camera.center;
                   _hasChosen = true;
                 });
               },
             ),
             children: [
               _tileLayer(),
+              if (_hasChosen)
+                _CameraAnchoredMarkerLayer(
+                  markers: [
+                    _CameraAnchoredMarker(
+                      key: const Key('location_picker_marker'),
+                      point: _selected,
+                      width: 52,
+                      height: 56,
+                      child: IgnorePointer(
+                        child: Icon(
+                          Icons.location_on,
+                          size: 52,
+                          color: Theme.of(context).colorScheme.primary,
+                          shadows: const [
+                            Shadow(color: Colors.white, blurRadius: 5),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               const Padding(
                 padding: EdgeInsets.only(bottom: 116),
                 child: SimpleAttributionWidget(
@@ -240,19 +245,6 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
                 ),
               ),
             ],
-          ),
-          Center(
-            child: Transform.translate(
-              offset: const Offset(0, -23),
-              child: IgnorePointer(
-                child: Icon(
-                  Icons.location_on,
-                  size: 52,
-                  color: Theme.of(context).colorScheme.primary,
-                  shadows: const [Shadow(color: Colors.white, blurRadius: 5)],
-                ),
-              ),
-            ),
           ),
           Positioned(
             top: 12,
@@ -264,7 +256,7 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
                 child: const Padding(
                   padding: EdgeInsets.all(12),
                   child: Text(
-                    'Move the map or tap a point until the pin marks the findspot. '
+                    'Tap the map to place or move the pin. You can then pan and zoom without changing the chosen findspot. '
                     'The displayed area is requested from OpenStreetMap.',
                   ),
                 ),
@@ -307,6 +299,59 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
       ),
     );
   }
+}
+
+class _CameraAnchoredMarkerLayer extends StatelessWidget {
+  const _CameraAnchoredMarkerLayer({required this.markers});
+
+  final List<_CameraAnchoredMarker> markers;
+
+  @override
+  Widget build(BuildContext context) {
+    final camera = MapCamera.of(context);
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        for (final marker in markers)
+          _positionMarker(camera: camera, marker: marker),
+      ],
+    );
+  }
+
+  Widget _positionMarker({
+    required MapCamera camera,
+    required _CameraAnchoredMarker marker,
+  }) {
+    final screenPosition = camera.latLngToScreenOffset(marker.point);
+    return Positioned(
+      left: screenPosition.dx - (marker.width / 2),
+      top: screenPosition.dy - marker.height,
+      width: marker.width,
+      height: marker.height,
+      child: SizedBox(
+        key: marker.key,
+        width: marker.width,
+        height: marker.height,
+        child: marker.child,
+      ),
+    );
+  }
+}
+
+class _CameraAnchoredMarker {
+  const _CameraAnchoredMarker({
+    required this.key,
+    required this.point,
+    required this.width,
+    required this.height,
+    required this.child,
+  });
+
+  final Key key;
+  final LatLng point;
+  final double width;
+  final double height;
+  final Widget child;
 }
 
 TileLayer _tileLayer() => TileLayer(

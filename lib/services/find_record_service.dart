@@ -46,7 +46,7 @@ class PhotoDraft {
   final FindPhotoSource source;
   final DateTime createdAt;
   final bool isOriginalEvidence;
-  final int sortOrder;
+  int sortOrder;
   final bool needsPreserving;
 }
 
@@ -60,6 +60,7 @@ class FindRecordService {
     FindDraft draft,
     List<PhotoDraft> photoDrafts,
   ) async {
+    _normalisePhotoOrder(photoDrafts);
     final photos = await _preserveNewPhotos(photoDrafts);
     return repository.create(draft, photos);
   }
@@ -69,16 +70,30 @@ class FindRecordService {
     FindDraft draft,
     List<PhotoDraft> photoDrafts,
   ) async {
+    _normalisePhotoOrder(photoDrafts);
     await repository.update(id, draft);
 
-    for (final photo in photoDrafts.where((photo) => photo.id != null)) {
-      await repository.updatePhotoRole(photo.id!, photo.role);
-    }
+    final existingPhotos = photoDrafts
+        .where((photo) => photo.id != null)
+        .map(
+          (photo) => FindPhotoUpdate(
+            id: photo.id!,
+            role: photo.role,
+            sortOrder: photo.sortOrder,
+          ),
+        )
+        .toList();
 
     final newPhotos = await _preserveNewPhotos(
       photoDrafts.where((photo) => photo.id == null).toList(),
     );
-    await repository.addPhotos(id, newPhotos);
+    await repository.reconcilePhotos(id, existingPhotos, newPhotos);
+  }
+
+  void _normalisePhotoOrder(List<PhotoDraft> drafts) {
+    for (final entry in drafts.indexed) {
+      entry.$2.sortOrder = entry.$1;
+    }
   }
 
   Future<List<NewFindPhoto>> _preserveNewPhotos(List<PhotoDraft> drafts) async {

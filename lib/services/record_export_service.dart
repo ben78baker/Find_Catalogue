@@ -81,8 +81,10 @@ class RecordExportService {
     List<FindRecord> records, {
     required FindspotExportPrecision findspotPrecision,
     bool photosBundled = false,
+    bool compress = true,
   }) async {
     final document = pw.Document(
+      compress: compress,
       title: 'Find Catalogue records',
       author: 'Find Catalogue',
     );
@@ -131,38 +133,42 @@ class RecordExportService {
             style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
           ),
           pw.SizedBox(height: 18),
-          ...records.indexed.expand(
-            (entry) => [
-              if (entry.$1 > 0) pw.NewPage(),
-              pw.Container(
-                margin: const pw.EdgeInsets.only(bottom: 14),
-                padding: const pw.EdgeInsets.all(12),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey400, width: 0.6),
-                  borderRadius: pw.BorderRadius.circular(5),
-                ),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      '${entry.$2.logNumber} - ${entry.$2.displayTitle}',
-                      style: pw.TextStyle(
-                        fontSize: 15,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.green900,
+          pw.Wrap(
+            children: records
+                .map(
+                  (record) => pw.Container(
+                    margin: const pw.EdgeInsets.only(bottom: 14),
+                    padding: const pw.EdgeInsets.all(12),
+                    decoration: pw.BoxDecoration(
+                      border: pw.Border.all(
+                        color: PdfColors.grey400,
+                        width: 0.6,
                       ),
+                      borderRadius: pw.BorderRadius.circular(5),
                     ),
-                    pw.SizedBox(height: 8),
-                    _pdfTable(
-                      entry.$2,
-                      findspotPrecision,
-                      photosBundled: photosBundled,
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          '${record.logNumber} - ${record.displayTitle}',
+                          style: pw.TextStyle(
+                            fontSize: 15,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.green900,
+                          ),
+                        ),
+                        pw.SizedBox(height: 8),
+                        _pdfTable(
+                          record,
+                          findspotPrecision,
+                          photosBundled: photosBundled,
+                        ),
+                        ..._pdfNotes(record),
+                      ],
                     ),
-                    ..._pdfNotes(entry.$2),
-                  ],
-                ),
-              ),
-            ],
+                  ),
+                )
+                .toList(),
           ),
         ],
       ),

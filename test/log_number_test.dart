@@ -2,6 +2,8 @@ import 'package:drift/native.dart';
 import 'package:find_catalogue/data/app_database.dart';
 import 'package:find_catalogue/data/find_repository.dart';
 import 'package:find_catalogue/domain/find_record.dart';
+import 'package:find_catalogue/services/find_record_service.dart';
+import 'package:find_catalogue/services/media_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -92,6 +94,97 @@ void main() {
       '/current/Documents/find_catalogue_media/originals/discovery.jpg',
     );
   });
+
+  test('reconciles photo removal, roles and listing order', () async {
+    final record = await repository.create(_draft(), [
+      _photo('first.jpg', 0),
+      _photo('second.jpg', 1),
+      _photo('third.jpg', 2),
+    ]);
+
+    await repository.reconcilePhotos(
+      record.id,
+      [
+        FindPhotoUpdate(
+          id: record.photos[2].id,
+          role: FindPhotoRole.reverse,
+          sortOrder: 0,
+        ),
+        FindPhotoUpdate(
+          id: record.photos[0].id,
+          role: FindPhotoRole.front,
+          sortOrder: 1,
+        ),
+      ],
+      [_photo('new-detail.jpg', 2)],
+    );
+
+    final updated = (await repository.getById(record.id))!;
+    expect(updated.photos.map((photo) => photo.path), [
+      'third.jpg',
+      'first.jpg',
+      'new-detail.jpg',
+    ]);
+    expect(updated.primaryPhoto?.path, 'third.jpg');
+    expect(updated.photos.map((photo) => photo.role), [
+      FindPhotoRole.reverse,
+      FindPhotoRole.front,
+      FindPhotoRole.detail,
+    ]);
+  });
+
+  test('record service persists the editor photo sequence', () async {
+    final service = FindRecordService(
+      repository: repository,
+      mediaStore: _PassthroughMediaStore(),
+    );
+    final record = await repository.create(_draft(), [
+      _photo('first.jpg', 0),
+      _photo('second.jpg', 1),
+      _photo('third.jpg', 2),
+    ]);
+    final reordered = [
+      PhotoDraft.fromStored(record.photos[2]),
+      PhotoDraft.fromStored(record.photos[0]),
+      PhotoDraft(
+        path: 'new.jpg',
+        role: FindPhotoRole.context,
+        source: FindPhotoSource.library,
+        createdAt: DateTime(2026),
+        isOriginalEvidence: true,
+        sortOrder: 99,
+        needsPreserving: false,
+      ),
+    ];
+
+    await service.update(record.id, _draft(), reordered);
+
+    final updated = (await repository.getById(record.id))!;
+    expect(updated.photos.map((photo) => photo.path), [
+      'third.jpg',
+      'first.jpg',
+      'new.jpg',
+    ]);
+    expect(updated.photos.map((photo) => photo.sortOrder), [0, 1, 2]);
+    expect(updated.primaryPhoto?.path, 'third.jpg');
+  });
+}
+
+NewFindPhoto _photo(String photoPath, int sortOrder) => NewFindPhoto(
+  path: photoPath,
+  role: FindPhotoRole.detail,
+  source: FindPhotoSource.library,
+  createdAt: DateTime(2026),
+  isOriginalEvidence: true,
+  sortOrder: sortOrder,
+);
+
+class _PassthroughMediaStore implements MediaStore {
+  @override
+  Future<String> preserveOriginal(String sourcePath) async => sourcePath;
+
+  @override
+  String resolvePath(String storedPath) => storedPath;
 }
 
 FindDraft _draft({

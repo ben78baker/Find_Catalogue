@@ -12,8 +12,11 @@ abstract interface class FindRepository {
     List<domain.NewFindPhoto> photos,
   );
   Future<void> update(int id, domain.FindDraft draft);
-  Future<void> addPhotos(int id, List<domain.NewFindPhoto> photos);
-  Future<void> updatePhotoRole(int photoId, domain.FindPhotoRole role);
+  Future<void> reconcilePhotos(
+    int recordId,
+    List<domain.FindPhotoUpdate> existingPhotos,
+    List<domain.NewFindPhoto> newPhotos,
+  );
 }
 
 class DriftFindRepository implements FindRepository {
@@ -117,35 +120,54 @@ class DriftFindRepository implements FindRepository {
   }
 
   @override
-  Future<void> addPhotos(int id, List<domain.NewFindPhoto> photos) async {
-    if (photos.isEmpty) return;
-    await database.batch((batch) {
-      batch.insertAll(
-        database.findPhotos,
-        photos.map((photo) => _photoCompanion(id, photo)).toList(),
+  Future<void> reconcilePhotos(
+    int recordId,
+    List<domain.FindPhotoUpdate> existingPhotos,
+    List<domain.NewFindPhoto> newPhotos,
+  ) async {
+    await database.transaction(() async {
+      final storedQuery = database.select(database.findPhotos)
+        ..where((table) => table.findRecordId.equals(recordId));
+      final stored = await storedQuery.get();
+      final storedIds = stored.map((photo) => photo.id).toSet();
+      final retainedIds = existingPhotos.map((photo) => photo.id).toSet();
+      if (!storedIds.containsAll(retainedIds)) {
+        throw ArgumentError('A photograph does not belong to this record.');
+      }
+
+      for (final photo in stored) {
+        if (retainedIds.contains(photo.id)) continue;
+        final deletion = database.delete(database.findPhotos)
+          ..where((table) => table.id.equals(photo.id));
+        await deletion.go();
+      }
+
+      for (final photo in existingPhotos) {
+        final update = database.update(database.findPhotos)
+          ..where((table) => table.id.equals(photo.id));
+        await update.write(
+          FindPhotosCompanion(
+            role: Value(photo.role.name),
+            sortOrder: Value(photo.sortOrder),
+          ),
+        );
+      }
+
+      if (newPhotos.isNotEmpty) {
+        await database.batch((batch) {
+          batch.insertAll(
+            database.findPhotos,
+            newPhotos.map((photo) => _photoCompanion(recordId, photo)).toList(),
+          );
+        });
+      }
+
+      final recordStatement = database.update(database.findRecords)
+        ..where((table) => table.id.equals(recordId));
+      await recordStatement.write(
+        FindRecordsCompanion(updatedAt: Value(DateTime.now())),
       );
     });
-    final statement = database.update(database.findRecords)
-      ..where((table) => table.id.equals(id));
-    await statement.write(
-      FindRecordsCompanion(updatedAt: Value(DateTime.now())),
-    );
-  }
-
-  @override
-  Future<void> updatePhotoRole(int photoId, domain.FindPhotoRole role) async {
-    final photoQuery = database.select(database.findPhotos)
-      ..where((table) => table.id.equals(photoId));
-    final photo = await photoQuery.getSingleOrNull();
-    if (photo == null) return;
-    final statement = database.update(database.findPhotos)
-      ..where((table) => table.id.equals(photoId));
-    await statement.write(FindPhotosCompanion(role: Value(role.name)));
-    final recordStatement = database.update(database.findRecords)
-      ..where((table) => table.id.equals(photo.findRecordId));
-    await recordStatement.write(
-      FindRecordsCompanion(updatedAt: Value(DateTime.now())),
-    );
   }
 
   FindRecordsCompanion _companionFromDraft(

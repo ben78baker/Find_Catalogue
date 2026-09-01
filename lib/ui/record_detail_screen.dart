@@ -51,6 +51,16 @@ class RecordDetailScreen extends StatelessWidget {
     );
   }
 
+  void _viewPhoto(BuildContext context, FindRecord record, int initialIndex) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) =>
+            _FullScreenPhotoViewer(record: record, initialIndex: initialIndex),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<FindRecord?>(
@@ -105,33 +115,52 @@ class RecordDetailScreen extends StatelessWidget {
             child: PageView.builder(
               itemCount: record.photos.length,
               controller: PageController(viewportFraction: 0.9),
-              itemBuilder: (_, index) => Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(18),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Image.file(
-                        File(record.photos[index].path),
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => const ColoredBox(
-                          color: Colors.black12,
-                          child: Icon(Icons.broken_image_outlined, size: 44),
+              itemBuilder: (_, index) {
+                final photo = record.photos[index];
+                return Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Semantics(
+                    button: true,
+                    label:
+                        'View ${enumLabel(photo.role)} photograph full screen',
+                    child: GestureDetector(
+                      key: Key('record_photo_$index'),
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () => _viewPhoto(context, record, index),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(18),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Image.file(
+                              File(photo.path),
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, _, _) => const ColoredBox(
+                                color: Colors.black12,
+                                child: Icon(
+                                  Icons.broken_image_outlined,
+                                  size: 44,
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: 10,
+                              bottom: 10,
+                              child: Chip(
+                                avatar: const Icon(
+                                  Icons.lock_outline,
+                                  size: 16,
+                                ),
+                                label: Text(enumLabel(photo.role)),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      Positioned(
-                        left: 10,
-                        bottom: 10,
-                        child: Chip(
-                          avatar: const Icon(Icons.lock_outline, size: 16),
-                          label: Text(enumLabel(record.photos[index].role)),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ),
+                );
+              },
             ),
           ),
         const SizedBox(height: 14),
@@ -240,6 +269,98 @@ class RecordDetailScreen extends StatelessWidget {
       _DetailRow('Thickness', '${record.thicknessMm} mm'),
     if (record.weightG != null) _DetailRow('Weight', '${record.weightG} g'),
   ];
+}
+
+class _FullScreenPhotoViewer extends StatefulWidget {
+  const _FullScreenPhotoViewer({
+    required this.record,
+    required this.initialIndex,
+  });
+
+  final FindRecord record;
+  final int initialIndex;
+
+  @override
+  State<_FullScreenPhotoViewer> createState() => _FullScreenPhotoViewerState();
+}
+
+class _FullScreenPhotoViewerState extends State<_FullScreenPhotoViewer> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final photos = widget.record.photos;
+    final photo = photos[_currentIndex];
+
+    return Scaffold(
+      key: const Key('full_screen_photo_viewer'),
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          key: const Key('close_full_screen_photo'),
+          tooltip: 'Close full-screen photograph',
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.close),
+        ),
+        title: Text(widget.record.logNumber),
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            controller: _pageController,
+            itemCount: photos.length,
+            onPageChanged: (index) => setState(() => _currentIndex = index),
+            itemBuilder: (_, index) => InteractiveViewer(
+              key: Key('full_screen_photo_$index'),
+              minScale: 1,
+              maxScale: 5,
+              child: Center(
+                child: Image.file(
+                  File(photos[index].path),
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white70,
+                    size: 64,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 12,
+            child: SafeArea(
+              top: false,
+              child: Text(
+                '${enumLabel(photo.role)} · ${_currentIndex + 1} of ${photos.length}',
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _DetailRow {

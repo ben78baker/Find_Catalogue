@@ -9,6 +9,10 @@ import '../services/photo_capture_service.dart';
 import 'find_map_screen.dart';
 import 'formatters.dart';
 
+void _unfocusOnTapOutside(PointerDownEvent _) {
+  FocusManager.instance.primaryFocus?.unfocus();
+}
+
 class RecordEditorScreen extends StatefulWidget {
   const RecordEditorScreen({
     super.key,
@@ -130,6 +134,8 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
     super.dispose();
   }
 
+  void _dismissKeyboard() => FocusManager.instance.primaryFocus?.unfocus();
+
   Future<void> _startInstantFind() async {
     if (_instantCaptureStarted) return;
     _instantCaptureStarted = true;
@@ -183,6 +189,40 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
       );
     });
     return true;
+  }
+
+  void _reorderPhotos(int oldIndex, int newIndex) {
+    setState(() {
+      if (newIndex > oldIndex) newIndex--;
+      final photo = _photos.removeAt(oldIndex);
+      _photos.insert(newIndex, photo);
+    });
+  }
+
+  Future<void> _removePhoto(PhotoDraft photo) async {
+    final remove = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove photograph?'),
+        content: const Text(
+          'The photograph will be removed from this record when you save. '
+          'Its preserved original image file will not be altered.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm_remove_photo'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (remove != true || !mounted) return;
+    setState(() => _photos.remove(photo));
   }
 
   Future<void> _chooseDate() async {
@@ -298,6 +338,13 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
               : 'Instant Find',
         ),
         actions: [
+          if (MediaQuery.viewInsetsOf(context).bottom > 0)
+            IconButton(
+              key: const Key('dismiss_record_keyboard'),
+              tooltip: 'Close keyboard',
+              onPressed: _dismissKeyboard,
+              icon: const Icon(Icons.keyboard_hide_outlined),
+            ),
           TextButton(
             key: const Key('save_record_button'),
             onPressed: _saving ? null : _save,
@@ -314,13 +361,14 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
       body: Form(
         key: _formKey,
         child: ListView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 36),
           children: [
             if (!_editing) _IntroBanner(method: widget.method),
             _Section(
               title: 'Photographs',
               subtitle:
-                  'Original images are preserved. You can change their catalogue role later.',
+                  'Drag to reorder. The first photograph is used in the records listing. Original images remain preserved.',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -329,18 +377,26 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                   else
                     SizedBox(
                       height: 180,
-                      child: ListView.separated(
+                      child: ReorderableListView.builder(
                         scrollDirection: Axis.horizontal,
+                        buildDefaultDragHandles: false,
                         itemCount: _photos.length,
-                        separatorBuilder: (_, _) => const SizedBox(width: 10),
-                        itemBuilder: (_, index) => _PhotoDraftCard(
-                          photo: _photos[index],
-                          canRemove: _photos[index].id == null,
-                          onRoleChanged: (role) =>
-                              setState(() => _photos[index].role = role),
-                          onRemove: () =>
-                              setState(() => _photos.removeAt(index)),
-                        ),
+                        onReorder: _reorderPhotos,
+                        itemBuilder: (_, index) {
+                          final photo = _photos[index];
+                          return Padding(
+                            key: ObjectKey(photo),
+                            padding: const EdgeInsets.only(right: 10),
+                            child: _PhotoDraftCard(
+                              index: index,
+                              photo: photo,
+                              isPrimary: index == 0,
+                              onRoleChanged: (role) =>
+                                  setState(() => photo.role = role),
+                              onRemove: () => _removePhoto(photo),
+                            ),
+                          );
+                        },
                       ),
                     ),
                   const SizedBox(height: 12),
@@ -500,7 +556,9 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
               child: Column(
                 children: [
                   TextFormField(
+                    key: const Key('preferred_identification_field'),
                     controller: _identification,
+                    onTapOutside: _unfocusOnTapOutside,
                     decoration: const InputDecoration(
                       labelText: 'Preferred identification',
                       hintText: 'Leave blank if unidentified',
@@ -509,6 +567,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _material,
+                    onTapOutside: _unfocusOnTapOutside,
                     decoration: const InputDecoration(
                       labelText: 'Material',
                       hintText: 'e.g. copper alloy, lead, iron',
@@ -634,6 +693,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                 children: [
                   TextFormField(
                     controller: _observations,
+                    onTapOutside: _unfocusOnTapOutside,
                     minLines: 3,
                     maxLines: 8,
                     decoration: const InputDecoration(
@@ -644,6 +704,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _research,
+                    onTapOutside: _unfocusOnTapOutside,
                     minLines: 3,
                     maxLines: 10,
                     decoration: const InputDecoration(
@@ -666,6 +727,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                 children: [
                   TextFormField(
                     controller: _sources,
+                    onTapOutside: _unfocusOnTapOutside,
                     minLines: 2,
                     maxLines: 6,
                     decoration: const InputDecoration(
@@ -675,6 +737,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _storage,
+                    onTapOutside: _unfocusOnTapOutside,
                     decoration: const InputDecoration(
                       labelText: 'Physical storage location',
                       hintText: 'e.g. Finds box 2, tray B',
@@ -800,20 +863,23 @@ class _EmptyPhotos extends StatelessWidget {
 
 class _PhotoDraftCard extends StatelessWidget {
   const _PhotoDraftCard({
+    required this.index,
     required this.photo,
-    required this.canRemove,
+    required this.isPrimary,
     required this.onRoleChanged,
     required this.onRemove,
   });
 
+  final int index;
   final PhotoDraft photo;
-  final bool canRemove;
+  final bool isPrimary;
   final ValueChanged<FindPhotoRole> onRoleChanged;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
+      key: Key('photo_editor_card_$index'),
       width: 150,
       child: Column(
         children: [
@@ -831,14 +897,59 @@ class _PhotoDraftCard extends StatelessWidget {
                       child: Icon(Icons.broken_image_outlined),
                     ),
                   ),
-                  if (canRemove)
+                  Positioned(
+                    top: 4,
+                    left: 4,
+                    child: ReorderableDragStartListener(
+                      index: index,
+                      child: Tooltip(
+                        key: Key('reorder_photo_$index'),
+                        message: 'Reorder photograph',
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: Theme.of(
+                              context,
+                            ).colorScheme.primaryContainer,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const SizedBox.square(
+                            dimension: 36,
+                            child: Icon(Icons.drag_handle, size: 18),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: IconButton.filledTonal(
+                      key: Key('remove_photo_$index'),
+                      tooltip: 'Remove photograph',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: onRemove,
+                      icon: const Icon(Icons.close, size: 18),
+                    ),
+                  ),
+                  if (isPrimary)
                     Positioned(
-                      top: 4,
-                      right: 4,
-                      child: IconButton.filledTonal(
-                        visualDensity: VisualDensity.compact,
-                        onPressed: onRemove,
-                        icon: const Icon(Icons.close, size: 18),
+                      left: 6,
+                      bottom: 6,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Text(
+                            'Listing photo',
+                            style: Theme.of(context).textTheme.labelSmall,
+                          ),
+                        ),
                       ),
                     ),
                 ],
@@ -883,6 +994,7 @@ class _NumberField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      onTapOutside: _unfocusOnTapOutside,
       keyboardType: TextInputType.numberWithOptions(
         decimal: true,
         signed: signed,
@@ -912,6 +1024,7 @@ class _YearField extends StatelessWidget {
   Widget build(BuildContext context) {
     return TextFormField(
       controller: controller,
+      onTapOutside: _unfocusOnTapOutside,
       keyboardType: const TextInputType.numberWithOptions(signed: true),
       decoration: InputDecoration(labelText: label, hintText: 'Year'),
       validator: (value) {

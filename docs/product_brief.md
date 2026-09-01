@@ -21,8 +21,11 @@ The initial screen offers three deliberately distinct actions:
 An always-available information action opens the published privacy policy and support page without competing with those three catalogue workflows.
 
 Selecting a record tile opens the full record. Editing is a separate, explicit action from the detail view.
+Tapping a photograph in the record detail view opens it full-screen, where it can be enlarged with pinch-to-zoom; records with several photographs can be browsed in the same viewer.
+While creating or editing a record, photographs can be reordered or removed from the record. The first photograph in the chosen order is always its thumbnail in the records listing; removing a photograph does not alter the preserved original media file.
+Shared PDFs flow complete record cards consecutively. A record uses the remaining page space when it fits and otherwise starts intact on the following page.
 
-Records with stored coordinates offer a private in-app map view. The records screen can map the current result set: all located records when no search or filters are active, or only located records matching the active search and filters. The manual Create Find Record flow also allows a findspot to be positioned precisely on the map.
+Records with stored coordinates offer a private in-app map view. The records screen can map the current result set: all located records when no search or filters are active, or only located records matching the active search and filters. The manual Create Find Record flow also allows a findspot to be positioned precisely on the map. Tapping places its pin at a geographic coordinate; subsequent panning or zooming must move the pin with the map without altering that chosen coordinate.
 
 ### 1. Capture a discovery
 
