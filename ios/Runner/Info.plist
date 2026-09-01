@@ -29,7 +29,7 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Find Catalogue uses the camera to record original photographs of your finds.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Find Catalogue records a find's location when you choose Instant Find or request the current location.</string>
+	<string>Find Catalogue uses your location to save the position where a find was recorded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Find Catalogue lets you choose existing photographs for find records.</string>
 	<key>UIApplicationSceneManifest</key>
