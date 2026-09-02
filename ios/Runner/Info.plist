@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Find Catalogue uses the camera to record original photographs of your finds.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Find Catalogue uses location services to save the position where a find was recorded.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Find Catalogue uses your location to save the position where a find was recorded.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
