@@ -29,7 +29,7 @@ class RecordDetailScreen extends StatelessWidget {
   final LocationCaptureService locationCaptureService;
 
   Future<void> _edit(BuildContext context, FindRecord record) async {
-    await Navigator.of(context).push<int>(
+    final result = await Navigator.of(context).push<RecordEditorResult>(
       MaterialPageRoute(
         builder: (_) => RecordEditorScreen(
           method: record.method,
@@ -40,13 +40,19 @@ class RecordDetailScreen extends StatelessWidget {
         ),
       ),
     );
+    if (result?.wasDeleted == true && context.mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   void _viewOnMap(BuildContext context, FindRecord record) {
     Navigator.of(context).push<void>(
       MaterialPageRoute(
-        builder: (_) =>
-            FindMapScreen(title: record.logNumber, records: [record]),
+        builder: (_) => FindMapScreen(
+          title: record.logNumber,
+          records: [record],
+          locationCaptureService: locationCaptureService,
+        ),
       ),
     );
   }

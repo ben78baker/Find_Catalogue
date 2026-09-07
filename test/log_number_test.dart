@@ -26,6 +26,30 @@ void main() {
     expect(second.id, isNot(first.id));
   });
 
+  test('deleting a record preserves existing and future log numbers', () async {
+    final first = await repository.create(_draft(), const []);
+    final deleted = await repository.create(_draft(), [
+      _photo('deleted-record.jpg', 0),
+    ]);
+    final third = await repository.create(_draft(), const []);
+
+    await repository.delete(deleted.id);
+
+    final remaining = await repository.watchAll().first;
+    expect(remaining.map((record) => record.logNumber).toSet(), {
+      first.logNumber,
+      third.logNumber,
+    });
+    expect(await repository.getById(deleted.id), isNull);
+    expect(await database.select(database.findPhotos).get(), isEmpty);
+
+    final next = await repository.create(_draft(), const []);
+    expect(first.logNumber, 'FO-000001');
+    expect(deleted.logNumber, 'FO-000002');
+    expect(third.logNumber, 'FO-000003');
+    expect(next.logNumber, 'FO-000004');
+  });
+
   test(
     'global search text includes research, measurements and location',
     () async {

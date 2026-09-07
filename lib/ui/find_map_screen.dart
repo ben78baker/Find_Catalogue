@@ -1,8 +1,13 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../domain/find_record.dart';
+import '../services/location_capture_service.dart';
+import '../services/place_geocoding_service.dart';
 import 'formatters.dart';
 
 const _tileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -26,33 +31,105 @@ List<FindRecord> mappableRecords(Iterable<FindRecord> records) => records
 LatLng _point(FindLocation location) =>
     LatLng(location.latitude, location.longitude);
 
-class FindMapScreen extends StatelessWidget {
+double _zoomForVisibleWidth(
+  BuildContext context,
+  double latitude,
+  double targetWidthMetres, {
+  double minimum = 2,
+  double maximum = 19,
+}) {
+  final width = MediaQuery.sizeOf(context).width.clamp(280.0, 1000.0);
+  final cosine = math.cos(latitude * math.pi / 180).abs().clamp(0.05, 1.0);
+  return (math.log(156543.03392 * cosine * width / targetWidthMetres) /
+          math.ln2)
+      .clamp(minimum, maximum);
+}
+
+class FindMapScreen extends StatefulWidget {
   const FindMapScreen({
     super.key,
     required this.title,
     required this.records,
     this.onRecordSelected,
+    this.geocodingService,
+    this.locationCaptureService,
   });
 
   final String title;
   final List<FindRecord> records;
   final ValueChanged<FindRecord>? onRecordSelected;
+  final PlaceGeocodingService? geocodingService;
+  final LocationCaptureService? locationCaptureService;
+
+  @override
+  State<FindMapScreen> createState() => _FindMapScreenState();
+}
+
+class _FindMapScreenState extends State<FindMapScreen> {
+  final _mapController = MapController();
+  LocationCaptureSession? _locationSession;
+  StreamSubscription<LocationCaptureResult>? _locationSubscription;
+  FindLocation? _currentLocation;
+  bool _mapReady = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (mappableRecords(widget.records).isEmpty &&
+        widget.locationCaptureService != null) {
+      final session = widget.locationCaptureService!.startLocationCapture();
+      _locationSession = session;
+      _locationSubscription = session.updates.listen(_useCurrentLocation);
+      unawaited(session.completed.then(_useCurrentLocation));
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_locationSubscription?.cancel());
+    unawaited(_locationSession?.cancel());
+    super.dispose();
+  }
+
+  void _useCurrentLocation(LocationCaptureResult result) {
+    if (!mounted ||
+        _currentLocation != null ||
+        !isMappableLocation(result.location)) {
+      return;
+    }
+    _currentLocation = result.location;
+    final point = _point(result.location!);
+    if (_mapReady) {
+      _mapController.move(
+        point,
+        _zoomForVisibleWidth(context, point.latitude, 12000),
+      );
+    }
+    unawaited(_locationSession?.cancel());
+  }
+
+  void _showSearchResult(PlaceSearchResult result) {
+    _mapController.move(
+      LatLng(result.latitude!, result.longitude!),
+      _zoomForVisibleWidth(context, result.latitude!, 3000),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final located = mappableRecords(records);
-    assert(located.isNotEmpty, 'At least one located record is required.');
+    final located = mappableRecords(widget.records);
     final points = located.map((record) => _point(record.location!)).toList();
-    final omitted = records.length - located.length;
+    final omitted = widget.records.length - located.length;
 
     return Scaffold(
-      appBar: AppBar(title: Text(title)),
+      appBar: AppBar(title: Text(widget.title)),
       body: Stack(
         children: [
           FlutterMap(
+            mapController: _mapController,
             options: MapOptions(
-              initialCenter: points.first,
-              initialZoom: 17,
+              initialCenter: points.isEmpty ? _overviewCenter : points.first,
+              initialZoom: points.isEmpty ? 5.5 : 17,
               initialCameraFit: points.length > 1
                   ? CameraFit.coordinates(
                       coordinates: points,
@@ -62,6 +139,16 @@ class FindMapScreen extends StatelessWidget {
                   : null,
               minZoom: 2,
               maxZoom: 19,
+              onMapReady: () {
+                _mapReady = true;
+                final location = _currentLocation;
+                if (location != null) {
+                  _mapController.move(
+                    _point(location),
+                    _zoomForVisibleWidth(context, location.latitude, 12000),
+                  );
+                }
+              },
             ),
             children: [
               _tileLayer(),
@@ -103,21 +190,30 @@ class FindMapScreen extends StatelessWidget {
             right: 12,
             child: SafeArea(
               bottom: false,
-              child: IgnorePointer(
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 9,
-                    ),
-                    child: Text(
-                      '${located.length} ${located.length == 1 ? 'find' : 'finds'} mapped'
-                      '${omitted == 0 ? '' : ' - $omitted without a usable location not shown'}. '
-                      'The displayed area is requested from OpenStreetMap; record details stay on this device.',
-                      style: Theme.of(context).textTheme.bodySmall,
+              child: Column(
+                children: [
+                  _PlaceSearchField(
+                    geocodingService: widget.geocodingService,
+                    onFound: _showSearchResult,
+                  ),
+                  const SizedBox(height: 6),
+                  IgnorePointer(
+                    child: Card(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        child: Text(
+                          '${located.length} ${located.length == 1 ? 'find' : 'finds'} mapped'
+                          '${omitted == 0 ? '' : ' - $omitted without a usable location not shown'}. '
+                          'The displayed area is requested from OpenStreetMap; record details stay on this device.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -138,14 +234,14 @@ class FindMapScreen extends StatelessWidget {
             '${formatCoordinate(record.location!.latitude)}, '
             '${formatCoordinate(record.location!.longitude)}',
           ),
-          trailing: onRecordSelected == null
+          trailing: widget.onRecordSelected == null
               ? null
               : const Icon(Icons.chevron_right),
-          onTap: onRecordSelected == null
+          onTap: widget.onRecordSelected == null
               ? null
               : () {
                   Navigator.pop(sheetContext);
-                  onRecordSelected!(record);
+                  widget.onRecordSelected!(record);
                 },
         ),
       ),
@@ -153,10 +249,35 @@ class FindMapScreen extends StatelessWidget {
   }
 }
 
+class FindLocationPickerResult {
+  const FindLocationPickerResult.confirmed(this.location) : skipped = false;
+  const FindLocationPickerResult.skipped() : location = null, skipped = true;
+
+  final FindLocation? location;
+  final bool skipped;
+}
+
 class FindLocationPickerScreen extends StatefulWidget {
-  const FindLocationPickerScreen({super.key, this.initialLocation});
+  const FindLocationPickerScreen({
+    super.key,
+    this.initialLocation,
+    this.locationUpdates,
+    this.allowSkip = false,
+    this.confirmLabel = 'Use this location',
+    this.locationMessage,
+    this.locationCaptureService,
+    this.geocodingService,
+    this.useCloseLocationView = false,
+  });
 
   final FindLocation? initialLocation;
+  final Stream<LocationCaptureResult>? locationUpdates;
+  final bool allowSkip;
+  final String confirmLabel;
+  final String? locationMessage;
+  final LocationCaptureService? locationCaptureService;
+  final PlaceGeocodingService? geocodingService;
+  final bool useCloseLocationView;
 
   @override
   State<FindLocationPickerScreen> createState() =>
@@ -164,25 +285,109 @@ class FindLocationPickerScreen extends StatefulWidget {
 }
 
 class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
+  final _mapController = MapController();
   late LatLng _selected;
   late bool _hasChosen;
+  FindLocation? _proposedLocation;
+  StreamSubscription<LocationCaptureResult>? _locationSubscription;
+  LocationCaptureSession? _generalLocationSession;
+  StreamSubscription<LocationCaptureResult>? _generalLocationSubscription;
+  String? _locationMessage;
+  bool _manuallyMoved = false;
+  bool _mapReady = false;
+  bool _hasCentredOnCurrentLocation = false;
 
   @override
   void initState() {
     super.initState();
     _hasChosen = isMappableLocation(widget.initialLocation);
     _selected = _hasChosen ? _point(widget.initialLocation!) : _overviewCenter;
+    _proposedLocation = _hasChosen ? widget.initialLocation : null;
+    _locationMessage = widget.locationMessage;
+    _locationSubscription = widget.locationUpdates?.listen(_useImprovedFix);
+    if (!_hasChosen &&
+        widget.locationUpdates == null &&
+        widget.locationCaptureService != null) {
+      final session = widget.locationCaptureService!.startLocationCapture();
+      _generalLocationSession = session;
+      _generalLocationSubscription = session.updates.listen(
+        _useCurrentLocationForOverview,
+      );
+      unawaited(session.completed.then(_useCurrentLocationForOverview));
+    }
   }
 
-  FindLocation get _result => FindLocation(
-    latitude: _selected.latitude,
-    longitude: _selected.longitude,
-    horizontalAccuracy: null,
-    source: FieldSource.manuallyEntered,
-  );
+  @override
+  void dispose() {
+    unawaited(_locationSubscription?.cancel());
+    unawaited(_generalLocationSubscription?.cancel());
+    unawaited(_generalLocationSession?.cancel());
+    super.dispose();
+  }
+
+  FindLocation get _result {
+    if (!_manuallyMoved && _proposedLocation != null) return _proposedLocation!;
+    return FindLocation(
+      latitude: _selected.latitude,
+      longitude: _selected.longitude,
+      horizontalAccuracy: null,
+      source: FieldSource.manuallyEntered,
+    );
+  }
+
+  void _useImprovedFix(LocationCaptureResult result) {
+    if (!mounted || _manuallyMoved) return;
+    final location = result.location;
+    setState(() {
+      _locationMessage = result.message ?? _locationMessage;
+      if (!isMappableLocation(location)) return;
+      _proposedLocation = location;
+      _selected = _point(location!);
+      _hasChosen = true;
+    });
+    if (_mapReady && location != null) {
+      _mapController.move(
+        _selected,
+        _zoomForVisibleWidth(
+          context,
+          _selected.latitude,
+          widget.useCloseLocationView ? 200 : 12000,
+        ),
+      );
+    }
+  }
+
+  void _useCurrentLocationForOverview(LocationCaptureResult result) {
+    if (!mounted ||
+        _hasCentredOnCurrentLocation ||
+        _manuallyMoved ||
+        !isMappableLocation(result.location)) {
+      return;
+    }
+    _hasCentredOnCurrentLocation = true;
+    final point = _point(result.location!);
+    if (_mapReady) {
+      _mapController.move(
+        point,
+        _zoomForVisibleWidth(context, point.latitude, 12000),
+      );
+    } else {
+      setState(() => _selected = point);
+    }
+    unawaited(_generalLocationSession?.cancel());
+  }
+
+  void _showSearchResult(PlaceSearchResult result) {
+    _mapController.move(
+      LatLng(result.latitude!, result.longitude!),
+      _zoomForVisibleWidth(context, result.latitude!, 3000),
+    );
+  }
 
   void _useLocation() {
-    if (_hasChosen) Navigator.pop(context, _result);
+    if (_hasChosen) {
+      Navigator.pop(context, FindLocationPickerResult.confirmed(_result));
+    }
   }
 
   @override
@@ -194,7 +399,7 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
           TextButton(
             key: const Key('use_map_location_action'),
             onPressed: _hasChosen ? _useLocation : null,
-            child: const Text('Use'),
+            child: Text(widget.allowSkip ? 'Confirm' : 'Use'),
           ),
           const SizedBox(width: 8),
         ],
@@ -203,15 +408,28 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
         children: [
           FlutterMap(
             key: const Key('location_picker_map'),
+            mapController: _mapController,
             options: MapOptions(
               initialCenter: _selected,
-              initialZoom: _hasChosen ? 17 : 5.5,
+              initialZoom: _hasChosen
+                  ? _zoomForVisibleWidth(context, _selected.latitude, 200)
+                  : 5.5,
               minZoom: 2,
               maxZoom: 19,
+              onMapReady: () {
+                _mapReady = true;
+                if (_hasCentredOnCurrentLocation) {
+                  _mapController.move(
+                    _selected,
+                    _zoomForVisibleWidth(context, _selected.latitude, 12000),
+                  );
+                }
+              },
               onTap: (_, point) {
                 setState(() {
                   _selected = point;
                   _hasChosen = true;
+                  _manuallyMoved = true;
                 });
               },
             ),
@@ -252,14 +470,23 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
             right: 12,
             child: SafeArea(
               bottom: false,
-              child: Card(
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Text(
-                    'Tap the map to place or move the pin. You can then pan and zoom without changing the chosen findspot. '
-                    'The displayed area is requested from OpenStreetMap.',
+              child: Column(
+                children: [
+                  _PlaceSearchField(
+                    geocodingService: widget.geocodingService,
+                    onFound: _showSearchResult,
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  const Card(
+                    child: Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Text(
+                        'Confirm the proposed pin or tap the map to move it. You can then pan and zoom without changing the chosen findspot. '
+                        'The displayed area is requested from OpenStreetMap.',
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -282,12 +509,48 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
                             : 'Move or tap the map to choose a location',
                         textAlign: TextAlign.center,
                       ),
+                      if (!_manuallyMoved &&
+                          _proposedLocation?.horizontalAccuracy != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'GPS accuracy ±${_proposedLocation!.horizontalAccuracy!.toStringAsFixed(1)} m',
+                          key: const Key('location_picker_accuracy'),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                      if (_locationMessage != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _locationMessage!,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                       const SizedBox(height: 8),
-                      FilledButton.icon(
-                        key: const Key('use_map_location_button'),
-                        onPressed: _hasChosen ? _useLocation : null,
-                        icon: const Icon(Icons.check),
-                        label: const Text('Use this location'),
+                      Row(
+                        children: [
+                          if (widget.allowSkip) ...[
+                            Expanded(
+                              child: OutlinedButton(
+                                key: const Key('skip_map_location_button'),
+                                onPressed: () => Navigator.pop(
+                                  context,
+                                  const FindLocationPickerResult.skipped(),
+                                ),
+                                child: const Text('Skip location'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                          ],
+                          Expanded(
+                            child: FilledButton.icon(
+                              key: const Key('use_map_location_button'),
+                              onPressed: _hasChosen ? _useLocation : null,
+                              icon: const Icon(Icons.check),
+                              label: Text(widget.confirmLabel),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
@@ -296,6 +559,91 @@ class _FindLocationPickerScreenState extends State<FindLocationPickerScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PlaceSearchField extends StatefulWidget {
+  const _PlaceSearchField({required this.onFound, this.geocodingService});
+
+  final ValueChanged<PlaceSearchResult> onFound;
+  final PlaceGeocodingService? geocodingService;
+
+  @override
+  State<_PlaceSearchField> createState() => _PlaceSearchFieldState();
+}
+
+class _PlaceSearchFieldState extends State<_PlaceSearchField> {
+  final _controller = TextEditingController();
+  late final PlaceGeocodingService _geocodingService;
+  bool _searching = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _geocodingService =
+        widget.geocodingService ?? NominatimPlaceGeocodingService();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Future<void> _search([String? _]) async {
+    if (_searching) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _searching = true);
+    final result = await _geocodingService.search(_controller.text);
+    if (!mounted) return;
+    setState(() => _searching = false);
+    if (result.found) {
+      widget.onFound(result);
+      final displayName = result.displayName;
+      if (displayName != null && displayName.isNotEmpty) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(displayName)));
+      }
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(result.message ?? 'No matching place was found.')),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: TextField(
+          key: const Key('map_place_search_field'),
+          controller: _controller,
+          textInputAction: TextInputAction.search,
+          onSubmitted: _search,
+          decoration: InputDecoration(
+            hintText: 'Search place, postcode or address',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _searching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox.square(
+                      dimension: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : IconButton(
+                    key: const Key('map_place_search_button'),
+                    tooltip: 'Search map',
+                    onPressed: _search,
+                    icon: const Icon(Icons.arrow_forward),
+                  ),
+          ),
+        ),
       ),
     );
   }

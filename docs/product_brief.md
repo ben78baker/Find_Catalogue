@@ -14,18 +14,19 @@ The first release targets iPhone, Android phones, and macOS. iPad and Android ta
 
 The initial screen offers three deliberately distinct actions:
 
-- **Instant Find** starts a record at the find event and captures a discovery photograph, current time, and current location.
+- **Instant Find** starts a record at the find event, captures a discovery photograph and current time, then asks the user to confirm, adjust, or skip the best available current location on a close map view.
 - **Create Find Record** catalogues an existing object later, using an existing photograph and manually entered, approximate, or unknown discovery details.
 - **View Records** opens the complete catalogue in date order, with global search across every field and filters.
 
 An always-available information action opens the published privacy policy and support page without competing with those three catalogue workflows.
 
 Selecting a record tile opens the full record. Editing is a separate, explicit action from the detail view.
+An existing record can be deleted only from its editor after explicit confirmation. Deletion removes the catalogue record and its photo references without renumbering remaining records or making the deleted log number available again. Preserved original media files are not automatically destroyed.
 Tapping a photograph in the record detail view opens it full-screen, where it can be enlarged with pinch-to-zoom; records with several photographs can be browsed in the same viewer.
 While creating or editing a record, photographs can be reordered or removed from the record. The first photograph in the chosen order is always its thumbnail in the records listing; removing a photograph does not alter the preserved original media file.
 Shared PDFs flow complete record cards consecutively. A record uses the remaining page space when it fits and otherwise starts intact on the following page.
 
-Records with stored coordinates offer a private in-app map view. The records screen can map the current result set: all located records when no search or filters are active, or only located records matching the active search and filters. The manual Create Find Record flow also allows a findspot to be positioned precisely on the map. Tapping places its pin at a geographic coordinate; subsequent panning or zooming must move the pin with the map without altering that chosen coordinate.
+Records with stored coordinates offer a private in-app map view. The records screen can map the current result set: all located records when no search or filters are active, or only located records matching the active search and filters. Manual creation, Instant Find confirmation, and record editing allow a findspot to be positioned precisely on the shared map picker. Tapping places its pin at a geographic coordinate; subsequent panning or zooming must move the pin with the map without altering that chosen coordinate. A picker without a stored position starts near the device's current location when available. Map screens also offer an explicitly submitted place, postcode, or address search; typing alone must not contact the geocoding provider.
 
 ### 1. Capture a discovery
 
@@ -115,7 +116,7 @@ A PDF-and-photos bundle contains the formatted PDF at its root and saveable phot
 - Export should include an open tabular format for core records plus a documented media folder structure.
 - Restore must be tested and must never silently replace an existing catalogue.
 - Permanent log numbers are never reused after deletion or record merging.
-- Record coordinates and search results remain local. Interactive base-map tiles are requested from OpenStreetMap only when a user opens a map; visible attribution and the map provider's caching and usage requirements must be respected. Coordinate entry and the underlying catalogue continue to work without map tiles.
+- Record coordinates and catalogue search results remain local. Interactive base-map tiles are requested from OpenStreetMap only when a user opens a map. A map place-search query is sent to the configured geocoding provider only when the user explicitly submits it. Visible attribution and each provider's caching and usage requirements must be respected. Coordinate entry and the underlying catalogue continue to work without maps or geocoding.
 
 ## Initial release slices
 

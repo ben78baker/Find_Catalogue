@@ -12,6 +12,7 @@ abstract interface class FindRepository {
     List<domain.NewFindPhoto> photos,
   );
   Future<void> update(int id, domain.FindDraft draft);
+  Future<void> delete(int id);
   Future<void> reconcilePhotos(
     int recordId,
     List<domain.FindPhotoUpdate> existingPhotos,
@@ -117,6 +118,19 @@ class DriftFindRepository implements FindRepository {
     await statement.write(
       _companionFromDraft(draft, updatedAt: DateTime.now()),
     );
+  }
+
+  @override
+  Future<void> delete(int id) async {
+    await database.transaction(() async {
+      final photos = database.delete(database.findPhotos)
+        ..where((table) => table.findRecordId.equals(id));
+      await photos.go();
+
+      final record = database.delete(database.findRecords)
+        ..where((table) => table.id.equals(id));
+      await record.go();
+    });
   }
 
   @override

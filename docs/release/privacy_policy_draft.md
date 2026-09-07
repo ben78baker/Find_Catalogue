@@ -38,6 +38,8 @@ https://osmfoundation.org/wiki/Privacy_Policy
 
 The app’s catalogue and coordinate entry continue to work without opening an interactive map.
 
+If you explicitly submit a place, postcode or address in the map search field, that search text is sent to OpenStreetMap's Nominatim geocoding service together with normal connection information such as your IP address and application identifier. Typing without submitting does not send a geocoding request. The query is used to return a map location and is not added to your catalogue by Find Catalogue.
+
 ## Sharing and exports
 
 The app shares information only when you start an export and choose a destination through the device’s share interface. Before an export is created, you choose whether exact coordinates are hidden or included. When a photo bundle hides locations, supported photographs are re-encoded without embedded metadata; a file that cannot be sanitised safely is omitted and identified in the bundle manifest.
