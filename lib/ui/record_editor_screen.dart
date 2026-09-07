@@ -13,6 +13,14 @@ void _unfocusOnTapOutside(PointerDownEvent _) {
   FocusManager.instance.primaryFocus?.unfocus();
 }
 
+class RecordEditorResult {
+  const RecordEditorResult.saved(this.recordId) : wasDeleted = false;
+  const RecordEditorResult.deleted() : recordId = null, wasDeleted = true;
+
+  final int? recordId;
+  final bool wasDeleted;
+}
+
 class RecordEditorScreen extends StatefulWidget {
   const RecordEditorScreen({
     super.key,
@@ -62,8 +70,10 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
   String? _locationMessage;
   bool _capturingLocation = false;
   bool _saving = false;
+  bool _deleting = false;
   bool _showAdditionalFields = false;
   bool _instantCaptureStarted = false;
+  LocationCaptureSession? _instantLocationSession;
 
   bool get _editing => widget.existingRecord != null;
 
@@ -110,6 +120,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
 
   @override
   void dispose() {
+    _instantLocationSession?.cancel();
     for (final controller in [
       _identification,
       _material,
@@ -139,9 +150,45 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
   Future<void> _startInstantFind() async {
     if (_instantCaptureStarted) return;
     _instantCaptureStarted = true;
-    _captureLocation();
-    final captured = await _addPhoto(camera: true, discovery: true);
-    if (!captured && mounted) Navigator.of(context).pop();
+    final session = widget.locationCaptureService.startLocationCapture();
+    _instantLocationSession = session;
+    try {
+      final captured = await _addPhoto(camera: true, discovery: true);
+      if (!captured) {
+        if (mounted) Navigator.of(context).pop();
+        return;
+      }
+      if (!mounted) return;
+
+      final best = session.bestResult;
+      final result = await Navigator.of(context).push<FindLocationPickerResult>(
+        MaterialPageRoute(
+          builder: (_) => FindLocationPickerScreen(
+            initialLocation: best?.location,
+            locationUpdates: session.updates,
+            allowSkip: true,
+            confirmLabel: 'Confirm location',
+            locationMessage: best?.message,
+            useCloseLocationView: true,
+          ),
+        ),
+      );
+      if (!mounted || result == null) return;
+      setState(() {
+        _location = result.location;
+        _locationMessage = result.skipped
+            ? 'Location skipped. You can add one before saving if needed.'
+            : result.location?.source == FieldSource.deviceCaptured
+            ? 'GPS location confirmed on the map.'
+            : 'Location selected manually on the map.';
+        _syncLocationFields(result.location);
+      });
+    } finally {
+      await session.cancel();
+      if (identical(_instantLocationSession, session)) {
+        _instantLocationSession = null;
+      }
+    }
   }
 
   Future<void> _captureLocation() async {
@@ -243,11 +290,15 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
   Future<void> _pickLocationOnMap() async {
     final current = _manualLocation();
     final initial = isMappableLocation(current) ? current : null;
-    final selected = await Navigator.of(context).push<FindLocation>(
+    final result = await Navigator.of(context).push<FindLocationPickerResult>(
       MaterialPageRoute(
-        builder: (_) => FindLocationPickerScreen(initialLocation: initial),
+        builder: (_) => FindLocationPickerScreen(
+          initialLocation: initial,
+          locationCaptureService: widget.locationCaptureService,
+        ),
       ),
     );
+    final selected = result?.location;
     if (selected == null || !mounted) return;
     setState(() {
       _location = selected;
@@ -311,16 +362,63 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
       final existing = widget.existingRecord;
       if (existing == null) {
         final created = await widget.recordService.create(_draft(), _photos);
-        if (mounted) Navigator.of(context).pop(created.id);
+        if (mounted) {
+          Navigator.of(context).pop(RecordEditorResult.saved(created.id));
+        }
       } else {
         await widget.recordService.update(existing.id, _draft(), _photos);
-        if (mounted) Navigator.of(context).pop(existing.id);
+        if (mounted) {
+          Navigator.of(context).pop(RecordEditorResult.saved(existing.id));
+        }
       }
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('The record could not be saved: $error')),
+      );
+    }
+  }
+
+  Future<void> _deleteRecord() async {
+    final existing = widget.existingRecord;
+    if (existing == null || _deleting) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete this record?'),
+        content: const Text('This will remove the record from your catalogue.'),
+        actions: [
+          TextButton(
+            key: const Key('cancel_delete_record_button'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            key: const Key('confirm_delete_record_button'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    try {
+      await widget.recordService.delete(existing.id);
+      if (mounted) {
+        Navigator.of(context).pop(const RecordEditorResult.deleted());
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('The record could not be deleted: $error')),
       );
     }
   }
@@ -347,7 +445,7 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
             ),
           TextButton(
             key: const Key('save_record_button'),
-            onPressed: _saving ? null : _save,
+            onPressed: _saving || _deleting ? null : _save,
             child: _saving
                 ? const SizedBox.square(
                     dimension: 18,
@@ -513,12 +611,23 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                                 : 'Refresh location',
                           ),
                         ),
-                        if (manual)
+                        if (manual || _editing)
                           OutlinedButton.icon(
                             key: const Key('pinpoint_location_button'),
                             onPressed: _pickLocationOnMap,
                             icon: const Icon(Icons.add_location_alt_outlined),
                             label: const Text('Pinpoint on map'),
+                          ),
+                        if (_location != null)
+                          TextButton.icon(
+                            key: const Key('clear_location_button'),
+                            onPressed: () => setState(() {
+                              _location = null;
+                              _locationMessage = 'Location cleared.';
+                              _syncLocationFields(null);
+                            }),
+                            icon: const Icon(Icons.location_off_outlined),
+                            label: const Text('Clear location'),
                           ),
                       ],
                     ),
@@ -528,17 +637,23 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
                     children: [
                       Expanded(
                         child: _NumberField(
+                          key: const Key('latitude_field'),
                           controller: _latitude,
                           label: 'Latitude',
                           signed: true,
+                          minimum: -90,
+                          maximum: 90,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: _NumberField(
+                          key: const Key('longitude_field'),
                           controller: _longitude,
                           label: 'Longitude',
                           signed: true,
+                          minimum: -180,
+                          maximum: 180,
                         ),
                       ),
                     ],
@@ -748,13 +863,34 @@ class _RecordEditorScreenState extends State<RecordEditorScreen> {
             ),
             const SizedBox(height: 18),
             FilledButton.icon(
-              onPressed: _saving ? null : _save,
+              onPressed: _saving || _deleting ? null : _save,
               icon: const Icon(Icons.save_outlined),
               label: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 child: Text(_editing ? 'Save changes' : 'Create record'),
               ),
             ),
+            if (_editing) ...[
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                key: const Key('delete_record_button'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Theme.of(context).colorScheme.error,
+                  side: BorderSide(color: Theme.of(context).colorScheme.error),
+                ),
+                onPressed: _saving || _deleting ? null : _deleteRecord,
+                icon: _deleting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.delete_outline),
+                label: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 13),
+                  child: Text('Delete record'),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -981,14 +1117,19 @@ class _PhotoDraftCard extends StatelessWidget {
 
 class _NumberField extends StatelessWidget {
   const _NumberField({
+    super.key,
     required this.controller,
     required this.label,
     this.signed = false,
+    this.minimum,
+    this.maximum,
   });
 
   final TextEditingController controller;
   final String label;
   final bool signed;
+  final double? minimum;
+  final double? maximum;
 
   @override
   Widget build(BuildContext context) {
@@ -1002,8 +1143,14 @@ class _NumberField extends StatelessWidget {
       decoration: InputDecoration(labelText: label),
       validator: (value) {
         final text = value?.trim() ?? '';
-        if (text.isEmpty || double.tryParse(text) != null) return null;
-        return 'Enter a number';
+        if (text.isEmpty) return null;
+        final number = double.tryParse(text);
+        if (number == null || !number.isFinite) return 'Enter a number';
+        if (minimum != null && number < minimum! ||
+            maximum != null && number > maximum!) {
+          return 'Enter ${minimum!.toStringAsFixed(0)} to ${maximum!.toStringAsFixed(0)}';
+        }
+        return null;
       },
     );
   }

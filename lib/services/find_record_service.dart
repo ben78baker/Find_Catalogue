@@ -90,6 +90,8 @@ class FindRecordService {
     await repository.reconcilePhotos(id, existingPhotos, newPhotos);
   }
 
+  Future<void> delete(int id) => repository.delete(id);
+
   void _normalisePhotoOrder(List<PhotoDraft> drafts) {
     for (final entry in drafts.indexed) {
       entry.$2.sortOrder = entry.$1;

@@ -206,6 +206,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
           title: 'Finds map',
           records: records,
           onRecordSelected: _open,
+          locationCaptureService: widget.locationCaptureService,
         ),
       ),
     );

@@ -20,15 +20,18 @@ The following data is processed and stored locally and, by itself, is not “col
 
 User-directed exports through the system share sheet are not sent to a developer-operated service. The user deliberately chooses the file, its location precision and the receiving destination.
 
-## OpenStreetMap map-tile requests
+## OpenStreetMap map and place-search requests
 
 Opening a map sends tile requests for the displayed area to OpenStreetMap. OSMF states that service logs can contain IP address, application/browser and device information, operating system, time and resources accessed. Because those logs can persist beyond the real-time request, a blanket **Data Not Collected** answer would be difficult to justify.
+
+Submitting the map search field also sends the entered place, postcode or address to OpenStreetMap's Nominatim service. Typing without submitting does not send a request.
 
 Conservative App Store Connect entries to consider:
 
 | Data type | Purpose | Linked to user | Tracking |
 | --- | --- | --- | --- |
 | Precise Location | App Functionality | Yes — conservative because a high-zoom tile area may be logged with IP address | No |
+| Search History | App Functionality | Yes — conservative because an explicitly submitted map query may be logged with IP address | No |
 | Product Interaction or Other Usage Data | App Functionality | Yes — conservative because accessed tiles can be logged with IP address | No |
 
 Apple does not provide a single dedicated “IP address” data type; its guidance says to select the relevant type based on how an IP address is used. Confirm the final classification in App Store Connect or with qualified privacy advice.

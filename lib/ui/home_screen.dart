@@ -28,7 +28,7 @@ class HomeScreen extends StatelessWidget {
     BuildContext context,
     FindRecordMethod method,
   ) async {
-    final recordId = await Navigator.of(context).push<int>(
+    final result = await Navigator.of(context).push<RecordEditorResult>(
       MaterialPageRoute(
         builder: (_) => RecordEditorScreen(
           method: method,
@@ -38,6 +38,7 @@ class HomeScreen extends StatelessWidget {
         ),
       ),
     );
+    final recordId = result?.recordId;
     if (recordId == null || !context.mounted) return;
     await Navigator.of(context).push<void>(
       MaterialPageRoute(
