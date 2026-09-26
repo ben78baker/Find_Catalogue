@@ -205,6 +205,7 @@ class _RecordsScreenState extends State<RecordsScreen> {
         builder: (_) => FindMapScreen(
           title: 'Finds map',
           records: records,
+          recordUpdates: widget.repository.watchAll().map(_apply),
           onRecordSelected: _open,
           locationCaptureService: widget.locationCaptureService,
         ),

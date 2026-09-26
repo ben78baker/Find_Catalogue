@@ -672,6 +672,52 @@ void main() {
     expect(find.text('FO-000001 - Ancient coin'), findsOneWidget);
     expect(find.text('51.500700, -0.124600'), findsOneWidget);
   });
+
+  testWidgets('map replaces cached find data when the record changes', (
+    tester,
+  ) async {
+    final original = _record(
+      id: 1,
+      title: 'Ancient coin',
+      location: const FindLocation(
+        latitude: 51.5007,
+        longitude: -0.1246,
+        source: FieldSource.manuallyEntered,
+      ),
+    );
+    final updates = StreamController<List<FindRecord>>();
+    addTearDown(updates.close);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FindMapScreen(
+          title: 'Finds map',
+          records: [original],
+          recordUpdates: updates.stream,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    updates.add([
+      _record(
+        id: 1,
+        title: 'Updated brooch',
+        location: const FindLocation(
+          latitude: 51.501,
+          longitude: -0.125,
+          source: FieldSource.manuallyEntered,
+        ),
+      ),
+    ]);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('map_marker_1')));
+    await tester.pumpAndSettle();
+    expect(find.text('FO-000001 - Updated brooch'), findsOneWidget);
+    expect(find.text('51.501000, -0.125000'), findsOneWidget);
+    expect(find.textContaining('Ancient coin'), findsNothing);
+  });
 }
 
 FindCatalogueApp _app(FindRepository repository) => FindCatalogueApp(

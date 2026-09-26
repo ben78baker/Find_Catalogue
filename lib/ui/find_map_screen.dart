@@ -50,6 +50,7 @@ class FindMapScreen extends StatefulWidget {
     super.key,
     required this.title,
     required this.records,
+    this.recordUpdates,
     this.onRecordSelected,
     this.geocodingService,
     this.locationCaptureService,
@@ -57,6 +58,7 @@ class FindMapScreen extends StatefulWidget {
 
   final String title;
   final List<FindRecord> records;
+  final Stream<List<FindRecord>>? recordUpdates;
   final ValueChanged<FindRecord>? onRecordSelected;
   final PlaceGeocodingService? geocodingService;
   final LocationCaptureService? locationCaptureService;
@@ -117,9 +119,18 @@ class _FindMapScreenState extends State<FindMapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final located = mappableRecords(widget.records);
+    return StreamBuilder<List<FindRecord>>(
+      stream: widget.recordUpdates,
+      initialData: widget.records,
+      builder: (context, snapshot) =>
+          _buildMap(context, snapshot.data ?? widget.records),
+    );
+  }
+
+  Widget _buildMap(BuildContext context, List<FindRecord> records) {
+    final located = mappableRecords(records);
     final points = located.map((record) => _point(record.location!)).toList();
-    final omitted = widget.records.length - located.length;
+    final omitted = records.length - located.length;
 
     return Scaffold(
       appBar: AppBar(title: Text(widget.title)),

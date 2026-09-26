@@ -51,6 +51,9 @@ class RecordDetailScreen extends StatelessWidget {
         builder: (_) => FindMapScreen(
           title: record.logNumber,
           records: [record],
+          recordUpdates: repository
+              .watchById(record.id)
+              .map((updated) => updated == null ? const [] : [updated]),
           locationCaptureService: locationCaptureService,
         ),
       ),
