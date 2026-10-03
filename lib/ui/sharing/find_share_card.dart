@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -64,7 +65,8 @@ class FindShareCard extends StatelessWidget {
   static const outputHeight = 1350;
   static const appIconAsset = 'assets/branding/find_catalogue_icon_1024.png';
   static const heroHeight = 160.0;
-  static const fullPhotoInsetSize = Size(96, 72);
+  static const fullPhotoInsetMaxImageSize = Size(96, 72);
+  static const fullPhotoInsetPadding = 5.0;
 
   static const _olive = Color(0xFF465E3B);
   static const _warmSurface = Color(0xFFF7F5EF);
@@ -76,6 +78,18 @@ class FindShareCard extends StatelessWidget {
   final FindShareCardData data;
   final ui.Image? heroImage;
   final ui.Image? brandingImage;
+
+  static Size containedFullPhotoSize(Size sourceSize) {
+    if (sourceSize.width <= 0 || sourceSize.height <= 0) return Size.zero;
+    final scale = math.min(
+      1.0,
+      math.min(
+        fullPhotoInsetMaxImageSize.width / sourceSize.width,
+        fullPhotoInsetMaxImageSize.height / sourceSize.height,
+      ),
+    );
+    return Size(sourceSize.width * scale, sourceSize.height * scale);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -178,6 +192,11 @@ class _HeroPhotograph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final fullPhotoSize = image == null
+        ? Size.zero
+        : FindShareCard.containedFullPhotoSize(
+            Size(image!.width.toDouble(), image!.height.toDouble()),
+          );
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: SizedBox(
@@ -197,15 +216,12 @@ class _HeroPhotograph extends StatelessWidget {
                   Positioned(
                     right: 8,
                     bottom: 8,
-                    child: Container(
+                    child: DecoratedBox(
                       key: const Key('find_share_card_full_photo_inset'),
-                      width: FindShareCard.fullPhotoInsetSize.width,
-                      height: FindShareCard.fullPhotoInsetSize.height,
-                      padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         border: Border.all(color: Colors.white, width: 1.5),
-                        borderRadius: BorderRadius.circular(11),
+                        borderRadius: BorderRadius.circular(10),
                         boxShadow: const [
                           BoxShadow(
                             color: Color(0x40000000),
@@ -214,16 +230,23 @@ class _HeroPhotograph extends StatelessWidget {
                           ),
                         ],
                       ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(7),
-                        child: ColoredBox(
-                          color: Colors.white,
-                          child: RawImage(
-                            key: const Key('find_share_card_full_photo_image'),
-                            image: image,
-                            fit: BoxFit.contain,
-                            alignment: Alignment.center,
-                            filterQuality: FilterQuality.medium,
+                      child: Padding(
+                        padding: const EdgeInsets.all(
+                          FindShareCard.fullPhotoInsetPadding,
+                        ),
+                        child: SizedBox.fromSize(
+                          size: fullPhotoSize,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: RawImage(
+                              key: const Key(
+                                'find_share_card_full_photo_image',
+                              ),
+                              image: image,
+                              fit: BoxFit.contain,
+                              alignment: Alignment.center,
+                              filterQuality: FilterQuality.medium,
+                            ),
                           ),
                         ),
                       ),

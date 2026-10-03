@@ -119,10 +119,10 @@ void main() {
         )!;
 
         // The cover crop shows the green centre, while both coloured edges
-        // remain visible in the 96 x 72 logical contained inset.
+        // remain visible in the adaptively sized contained inset.
         final heroCentre = decoded.getPixel(540, 414);
-        final insetLeft = decoded.getPixel(720, 522);
-        final insetRight = decoded.getPixel(960, 522);
+        final insetLeft = decoded.getPixel(700, 579);
+        final insetRight = decoded.getPixel(950, 579);
 
         expect(decoded.width, FindShareCard.outputWidth);
         expect(decoded.height, FindShareCard.outputHeight);

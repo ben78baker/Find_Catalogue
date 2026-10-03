@@ -172,60 +172,147 @@ void main() {
     );
   });
 
-  testWidgets('primary photo is reused for cover hero and contained inset', (
-    tester,
-  ) async {
-    final source = image.Image(width: 200, height: 50);
-    image.fill(source, color: image.ColorRgb8(70, 120, 50));
-    late final ui.FrameInfo frame;
-    await tester.runAsync(() async {
-      final codec = await ui.instantiateImageCodec(
-        Uint8List.fromList(image.encodePng(source)),
-      );
-      frame = await codec.getNextFrame();
-      codec.dispose();
-    });
-    final data = factory.create(
-      _record(
-        photos: [
-          FindPhoto(
-            id: 1,
-            path: '/photos/wide-primary.png',
-            role: FindPhotoRole.front,
-            source: FindPhotoSource.camera,
-            createdAt: _photoDate,
-            isOriginalEvidence: true,
-            sortOrder: 0,
+  group('adaptive full-photo inset', () {
+    final cases = <({String name, Size source, Size displayed})>[
+      (
+        name: 'portrait',
+        source: const Size(60, 120),
+        displayed: const Size(36, 72),
+      ),
+      (
+        name: 'landscape',
+        source: const Size(120, 60),
+        displayed: const Size(96, 48),
+      ),
+      (
+        name: 'square',
+        source: const Size(100, 100),
+        displayed: const Size(72, 72),
+      ),
+      (
+        name: 'very wide',
+        source: const Size(400, 50),
+        displayed: const Size(96, 12),
+      ),
+      (
+        name: 'very tall',
+        source: const Size(50, 400),
+        displayed: const Size(9, 72),
+      ),
+      (
+        name: 'small',
+        source: const Size(20, 10),
+        displayed: const Size(20, 10),
+      ),
+    ];
+
+    for (final testCase in cases) {
+      testWidgets('${testCase.name} photo hugs its adaptive container', (
+        tester,
+      ) async {
+        final decoded = await _decodeTestImage(
+          tester,
+          testCase.source.width.toInt(),
+          testCase.source.height.toInt(),
+        );
+        final data = factory.create(
+          _record(
+            photos: [
+              FindPhoto(
+                id: 1,
+                path: '/photos/${testCase.name}.png',
+                role: FindPhotoRole.front,
+                source: FindPhotoSource.camera,
+                createdAt: _photoDate,
+                isOriginalEvidence: true,
+                sortOrder: 0,
+              ),
+            ],
           ),
-        ],
-      ),
-    );
+        );
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Center(
-          child: FindShareCard(data: data, heroImage: frame.image),
-        ),
-      ),
-    );
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Center(
+              child: FindShareCard(data: data, heroImage: decoded),
+            ),
+          ),
+        );
 
-    final hero = tester.widget<RawImage>(
-      find.byKey(const Key('find_share_card_hero_image')),
-    );
-    final inset = tester.widget<RawImage>(
-      find.byKey(const Key('find_share_card_full_photo_image')),
-    );
-    expect(hero.image, same(frame.image));
-    expect(hero.fit, BoxFit.cover);
-    expect(inset.image, same(frame.image));
-    expect(inset.fit, BoxFit.contain);
-    expect(
-      tester.getSize(find.byKey(const Key('find_share_card_full_photo_inset'))),
-      FindShareCard.fullPhotoInsetSize,
-    );
-    await tester.pumpWidget(const SizedBox.shrink());
-    frame.image.dispose();
+        final heroFinder = find.byKey(const Key('find_share_card_hero_image'));
+        final imageFinder = find.byKey(
+          const Key('find_share_card_full_photo_image'),
+        );
+        final containerFinder = find.byKey(
+          const Key('find_share_card_full_photo_inset'),
+        );
+        final hero = tester.widget<RawImage>(heroFinder);
+        final inset = tester.widget<RawImage>(imageFinder);
+        final displayedSize = tester.getSize(imageFinder);
+        final containerSize = tester.getSize(containerFinder);
+        final heroRect = tester.getRect(heroFinder);
+        final containerRect = tester.getRect(containerFinder);
+
+        expect(hero.image, same(decoded));
+        expect(hero.fit, BoxFit.cover);
+        expect(inset.image, same(decoded));
+        expect(inset.fit, BoxFit.contain);
+        expect(displayedSize.width, closeTo(testCase.displayed.width, 0.01));
+        expect(displayedSize.height, closeTo(testCase.displayed.height, 0.01));
+        expect(
+          displayedSize.width / displayedSize.height,
+          closeTo(testCase.source.width / testCase.source.height, 0.001),
+        );
+        expect(
+          displayedSize.width,
+          lessThanOrEqualTo(FindShareCard.fullPhotoInsetMaxImageSize.width),
+        );
+        expect(
+          displayedSize.height,
+          lessThanOrEqualTo(FindShareCard.fullPhotoInsetMaxImageSize.height),
+        );
+        expect(
+          containerSize.width,
+          closeTo(
+            displayedSize.width + FindShareCard.fullPhotoInsetPadding * 2,
+            0.01,
+          ),
+        );
+        expect(
+          containerSize.height,
+          closeTo(
+            displayedSize.height + FindShareCard.fullPhotoInsetPadding * 2,
+            0.01,
+          ),
+        );
+        expect(containerRect.left, greaterThanOrEqualTo(heroRect.left));
+        expect(containerRect.top, greaterThanOrEqualTo(heroRect.top));
+        expect(heroRect.right - containerRect.right, closeTo(8, 0.01));
+        expect(heroRect.bottom - containerRect.bottom, closeTo(8, 0.01));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        decoded.dispose();
+      });
+    }
   });
+}
+
+Future<ui.Image> _decodeTestImage(
+  WidgetTester tester,
+  int width,
+  int height,
+) async {
+  final source = image.Image(width: width, height: height);
+  image.fill(source, color: image.ColorRgb8(70, 120, 50));
+  late final ui.Image decoded;
+  await tester.runAsync(() async {
+    final codec = await ui.instantiateImageCodec(
+      Uint8List.fromList(image.encodePng(source)),
+    );
+    decoded = (await codec.getNextFrame()).image;
+    codec.dispose();
+  });
+  return decoded;
 }
 
 final _photoDate = DateTime(2026, 8, 20);
