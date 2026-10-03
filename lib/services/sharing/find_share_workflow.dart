@@ -1,30 +1,22 @@
 import 'dart:ui' show Rect;
 
-import 'package:path/path.dart' as path;
-
 import '../../domain/find_record.dart';
 import '../record_export_service.dart';
 import 'find_share_card_generator.dart';
 import 'share_artifact.dart';
 import 'share_dispatcher.dart';
 import 'share_file_store.dart';
-import 'share_photo_processor.dart';
 
 enum FindShareFormat { shareCard, pdf, pdfPhotos, csv }
 
 class FindShareOptions {
   const FindShareOptions({
     this.format = FindShareFormat.shareCard,
-    this.includeAllPhotos = false,
     this.findspotPrecision = FindspotExportPrecision.hidden,
   });
 
   final FindShareFormat format;
-  final bool includeAllPhotos;
   final FindspotExportPrecision findspotPrecision;
-
-  bool get needsFindspotChoice =>
-      format != FindShareFormat.shareCard || includeAllPhotos;
 }
 
 class FindShareProgress {
@@ -61,15 +53,6 @@ class FindSharePreparationCancelled implements Exception {
   String toString() => 'Share preparation was cancelled.';
 }
 
-class FindSharePreparationException implements Exception {
-  const FindSharePreparationException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
 typedef FindShareProgressCallback = void Function(FindShareProgress progress);
 
 class FindShareWorkflow {
@@ -78,7 +61,6 @@ class FindShareWorkflow {
     RecordExportService? recordExportService,
     ShareDispatcher? shareDispatcher,
     ShareFileStore? shareFileStore,
-    SharePhotoProcessor? sharePhotoProcessor,
   }) {
     final fileStore = shareFileStore ?? ShareFileStore();
     return FindShareWorkflow._(
@@ -86,7 +68,6 @@ class FindShareWorkflow {
       recordExportService ?? RecordExportService(),
       shareDispatcher ?? ShareDispatcher(),
       fileStore,
-      sharePhotoProcessor ?? const SharePhotoProcessor(),
     );
   }
 
@@ -95,20 +76,12 @@ class FindShareWorkflow {
     this._recordExportService,
     this._shareDispatcher,
     this._shareFileStore,
-    this._sharePhotoProcessor,
   );
 
   final FindShareCardGenerator _cardGenerator;
   final RecordExportService _recordExportService;
   final ShareDispatcher _shareDispatcher;
   final ShareFileStore _shareFileStore;
-  final SharePhotoProcessor _sharePhotoProcessor;
-
-  static int additionalPhotoCount(List<FindRecord> records) => records.fold(
-    0,
-    (total, record) =>
-        total + (record.photos.length > 1 ? record.photos.length - 1 : 0),
-  );
 
   Future<List<ShareArtifact>> prepare(
     List<FindRecord> records, {
@@ -171,41 +144,6 @@ class FindShareWorkflow {
         ),
       );
 
-      if (options.includeAllPhotos) {
-        for (final photoEntry in record.photos.skip(1).indexed) {
-          final photo = photoEntry.$2;
-          late final ProcessedSharePhoto processed;
-          try {
-            processed = await _sharePhotoProcessor.process(
-              photo.path,
-              findspotPrecision: options.findspotPrecision,
-            );
-          } on SharePhotoProcessingException catch (error) {
-            throw FindSharePreparationException(
-              '${record.logNumber} photograph ${photoEntry.$1 + 2} '
-              'could not be prepared: ${error.message}',
-            );
-          }
-          final recordPrefix = (recordIndex + 1).toString().padLeft(2, '0');
-          final photoPrefix = (photoEntry.$1 + 2).toString().padLeft(2, '0');
-          final sourceName = path.basenameWithoutExtension(photo.path);
-          final fileName = [
-            recordPrefix,
-            _safeFileComponent(record.logNumber),
-            photoPrefix,
-            _safeFileComponent(photo.role.name),
-            _safeFileComponent(sourceName),
-          ].join('_');
-          artifacts.add(
-            await session.writeArtifact(
-              fileName: '$fileName${processed.extension}',
-              mimeType: processed.mimeType,
-              bytes: processed.bytes,
-            ),
-          );
-        }
-      }
-
       onProgress?.call(
         FindShareProgress(
           completedRecords: recordIndex + 1,
@@ -250,12 +188,4 @@ class FindShareWorkflow {
           'Share Cards are not record exports.',
         ),
       };
-
-  static String _safeFileComponent(String value) {
-    final safe = value
-        .trim()
-        .replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')
-        .replaceAll(RegExp(r'_+'), '_');
-    return safe.isEmpty ? 'photo' : safe;
-  }
 }

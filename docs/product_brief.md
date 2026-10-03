@@ -93,7 +93,7 @@ The QR target must work locally and must not encode exact coordinates or other s
 
 The private record can retain exact coordinates, landowner details, permission documents, and precise field information. Sharing and export are separate actions.
 
-Every shared record must offer an explicit findspot precision, for example:
+Structured record exports must offer an explicit findspot precision, for example:
 
 - hidden;
 - county or broad area;
@@ -102,6 +102,8 @@ Every shared record must offer an explicit findspot precision, for example:
 - exact coordinates.
 
 Default to hidden or deliberately reduced precision. A research export and a private backup are different products and should be clearly named.
+
+A Share Card is a self-contained, privacy-safe image: it always omits exact findspot data, re-renders the primary photograph without carrying source metadata into the PNG, and produces exactly one card per selected record. It therefore does not present a findspot-precision choice or attach source photographs.
 
 CSV and PDF sharing may be started from one record or from the records list. List sharing operates on the current search and filters, with an optional discovery-date range, so unrelated private records are not included accidentally.
 

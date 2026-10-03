@@ -25,17 +25,9 @@ class FindShareOptionsSheet extends StatefulWidget {
 
 class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
   FindShareFormat _format = FindShareFormat.shareCard;
-  bool _includeAllPhotos = false;
   FindspotExportPrecision _findspotPrecision = FindspotExportPrecision.hidden;
 
-  int get _additionalPhotoCount =>
-      FindShareWorkflow.additionalPhotoCount(widget.records);
-
-  bool get _showPhotoOption =>
-      _format == FindShareFormat.shareCard && _additionalPhotoCount > 0;
-
-  bool get _showPrivacyChoice =>
-      _format != FindShareFormat.shareCard || _includeAllPhotos;
+  bool get _showPrivacyChoice => _format != FindShareFormat.shareCard;
 
   @override
   Widget build(BuildContext context) {
@@ -75,12 +67,7 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
                   groupValue: _format,
                   onChanged: (value) {
                     if (value == null) return;
-                    setState(() {
-                      _format = value;
-                      if (_format != FindShareFormat.shareCard) {
-                        _includeAllPhotos = false;
-                      }
-                    });
+                    setState(() => _format = value);
                   },
                   child: Column(
                     children: [
@@ -96,22 +83,6 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
                     ],
                   ),
                 ),
-                if (_showPhotoOption) ...[
-                  const Divider(height: 24),
-                  SwitchListTile.adaptive(
-                    key: const Key('include_all_photos_toggle'),
-                    contentPadding: EdgeInsets.zero,
-                    value: _includeAllPhotos,
-                    onChanged: (value) =>
-                        setState(() => _includeAllPhotos = value),
-                    title: const Text('Include all photos'),
-                    subtitle: Text(
-                      'Attach the $_additionalPhotoCount additional '
-                      'photo${_additionalPhotoCount == 1 ? '' : 's'}; '
-                      'the first photo is already in each Share Card.',
-                    ),
-                  ),
-                ],
                 if (_showPrivacyChoice) ...[
                   const Divider(height: 24),
                   Text('Findspot privacy', style: theme.textTheme.titleSmall),
@@ -127,10 +98,7 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
                           secondary: const Icon(Icons.location_off_outlined),
                           title: const Text('Hidden'),
                           subtitle: Text(
-                            _format == FindShareFormat.shareCard
-                                ? 'Additional photos are copied with embedded '
-                                      'metadata removed.'
-                                : _format == FindShareFormat.pdfPhotos
+                            _format == FindShareFormat.pdfPhotos
                                 ? 'Exact coordinates are hidden and bundled '
                                       'photo copies have metadata removed.'
                                 : 'Exact coordinates are not included.',
@@ -142,35 +110,14 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
                           contentPadding: EdgeInsets.zero,
                           secondary: const Icon(Icons.my_location),
                           title: const Text('Exact findspots'),
-                          subtitle: Text(
-                            _format == FindShareFormat.shareCard
-                                ? 'Attach untouched photo copies only for a '
-                                      'trusted recipient.'
-                                : 'Include exact coordinates; use only with a '
-                                      'trusted recipient.',
+                          subtitle: const Text(
+                            'Include exact coordinates; use only with a '
+                            'trusted recipient.',
                           ),
                         ),
                       ],
                     ),
                   ),
-                  if (_format == FindShareFormat.shareCard &&
-                      _findspotPrecision == FindspotExportPrecision.exact)
-                    Container(
-                      key: const Key('exact_photo_warning'),
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: theme.colorScheme.errorContainer,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        'Original photographs may contain precise location '
-                        'metadata.',
-                        style: TextStyle(
-                          color: theme.colorScheme.onErrorContainer,
-                        ),
-                      ),
-                    ),
                 ],
                 Container(
                   key: const Key('share_attachment_summary'),
@@ -205,9 +152,6 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
                     context,
                     FindShareOptions(
                       format: _format,
-                      includeAllPhotos:
-                          _format == FindShareFormat.shareCard &&
-                          _includeAllPhotos,
                       findspotPrecision: _showPrivacyChoice
                           ? _findspotPrecision
                           : FindspotExportPrecision.hidden,
@@ -231,9 +175,7 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
   String _attachmentSummary() {
     if (_format == FindShareFormat.shareCard) {
       final cards = widget.records.length;
-      final photos = _includeAllPhotos ? _additionalPhotoCount : 0;
-      return '$cards Share Card${cards == 1 ? '' : 's'}'
-          '${photos == 0 ? '' : ' + $photos photo${photos == 1 ? '' : 's'}'}';
+      return '$cards Share Card${cards == 1 ? '' : 's'}';
     }
     return switch (_format) {
       FindShareFormat.pdf => '1 PDF',

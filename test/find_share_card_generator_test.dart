@@ -27,7 +27,8 @@ void main() {
             latitude: 51.123456,
             longitude: -1.234567,
           );
-        await first.writeAsBytes(image.encodeJpg(primaryImage, quality: 100));
+        final primaryBytes = image.encodeJpg(primaryImage, quality: 100);
+        await first.writeAsBytes(primaryBytes);
         await second.writeAsBytes(
           image.encodeJpg(_solidImage(40, 80, 20, 40, 220), quality: 100),
         );
@@ -52,6 +53,7 @@ void main() {
         expect(heroCentre.b, lessThan(80));
         expect(decoded.exif.gpsIfd.hasGPSLatitude, isFalse);
         expect(decoded.exif.gpsIfd.hasGPSLongitude, isFalse);
+        expect(await first.readAsBytes(), primaryBytes);
       } finally {
         await directory.delete(recursive: true);
       }
@@ -98,7 +100,45 @@ void main() {
     });
   });
 
-  testWidgets('no-photo and missing-photo records still generate cards', (
+  testWidgets('wide primary photo remains complete in the contained inset', (
+    tester,
+  ) async {
+    await tester.runAsync(() async {
+      final directory = await Directory.systemTemp.createTemp(
+        'find_share_card_inset_',
+      );
+      try {
+        final primary = File('${directory.path}/wide.png');
+        await primary.writeAsBytes(image.encodePng(_wideEdgeMarkedImage()));
+
+        final artifact = await _generator(
+          directory,
+        ).generateOne(_record(1, photos: [_photo(1, primary.path, 0)]));
+        final decoded = image.decodePng(
+          await File(artifact.path).readAsBytes(),
+        )!;
+
+        // The cover crop shows the green centre, while both coloured edges
+        // remain visible in the 96 x 72 logical contained inset.
+        final heroCentre = decoded.getPixel(540, 414);
+        final insetLeft = decoded.getPixel(720, 522);
+        final insetRight = decoded.getPixel(960, 522);
+
+        expect(decoded.width, FindShareCard.outputWidth);
+        expect(decoded.height, FindShareCard.outputHeight);
+        expect(heroCentre.g, greaterThan(180));
+        expect(heroCentre.r, lessThan(80));
+        expect(insetLeft.r, greaterThan(180));
+        expect(insetLeft.b, lessThan(80));
+        expect(insetRight.b, greaterThan(180));
+        expect(insetRight.r, lessThan(80));
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    });
+  });
+
+  testWidgets('absent, missing, and corrupt photos still generate cards', (
     tester,
   ) async {
     await tester.runAsync(() async {
@@ -108,13 +148,16 @@ void main() {
       try {
         final renderer = _TrackingRenderer();
         final generator = _generator(directory, renderer: renderer);
+        final corrupt = File('${directory.path}/corrupt.jpg');
+        await corrupt.writeAsBytes([1, 2, 3, 4, 5]);
 
         final artifacts = await generator.generateMany([
           _record(1),
           _record(2, photos: [_photo(2, '${directory.path}/missing.jpg', 0)]),
+          _record(3, photos: [_photo(3, corrupt.path, 0)]),
         ]);
 
-        expect(artifacts, hasLength(2));
+        expect(artifacts, hasLength(3));
         expect(
           renderer.cards[0].data.photoStatus,
           FindShareCardPhotoStatus.none,
@@ -123,8 +166,14 @@ void main() {
           renderer.cards[1].data.photoStatus,
           FindShareCardPhotoStatus.unavailable,
         );
+        expect(
+          renderer.cards[2].data.photoStatus,
+          FindShareCardPhotoStatus.unavailable,
+        );
         expect(renderer.cards[0].heroImage, isNull);
         expect(renderer.cards[1].heroImage, isNull);
+        expect(renderer.cards[2].heroImage, isNull);
+        expect(await corrupt.readAsBytes(), [1, 2, 3, 4, 5]);
       } finally {
         await directory.delete(recursive: true);
       }
@@ -319,6 +368,22 @@ FindRecord _record(
 image.Image _solidImage(int width, int height, int red, int green, int blue) {
   final result = image.Image(width: width, height: height);
   image.fill(result, color: image.ColorRgb8(red, green, blue));
+  return result;
+}
+
+image.Image _wideEdgeMarkedImage() {
+  final result = image.Image(width: 200, height: 50);
+  for (var y = 0; y < result.height; y++) {
+    for (var x = 0; x < result.width; x++) {
+      if (x < 50) {
+        result.setPixelRgb(x, y, 230, 25, 25);
+      } else if (x >= 150) {
+        result.setPixelRgb(x, y, 25, 25, 230);
+      } else {
+        result.setPixelRgb(x, y, 25, 210, 25);
+      }
+    }
+  }
   return result;
 }
 

@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:find_catalogue/domain/find_record.dart';
 import 'package:find_catalogue/services/sharing/find_share_card_factory.dart';
 import 'package:find_catalogue/ui/sharing/find_share_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
 
 void main() {
   const factory = FindShareCardFactory();
@@ -162,6 +166,65 @@ void main() {
     );
 
     expect(find.text('No photograph available'), findsOneWidget);
+    expect(
+      find.byKey(const Key('find_share_card_full_photo_inset')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('primary photo is reused for cover hero and contained inset', (
+    tester,
+  ) async {
+    final source = image.Image(width: 200, height: 50);
+    image.fill(source, color: image.ColorRgb8(70, 120, 50));
+    late final ui.FrameInfo frame;
+    await tester.runAsync(() async {
+      final codec = await ui.instantiateImageCodec(
+        Uint8List.fromList(image.encodePng(source)),
+      );
+      frame = await codec.getNextFrame();
+      codec.dispose();
+    });
+    final data = factory.create(
+      _record(
+        photos: [
+          FindPhoto(
+            id: 1,
+            path: '/photos/wide-primary.png',
+            role: FindPhotoRole.front,
+            source: FindPhotoSource.camera,
+            createdAt: _photoDate,
+            isOriginalEvidence: true,
+            sortOrder: 0,
+          ),
+        ],
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: FindShareCard(data: data, heroImage: frame.image),
+        ),
+      ),
+    );
+
+    final hero = tester.widget<RawImage>(
+      find.byKey(const Key('find_share_card_hero_image')),
+    );
+    final inset = tester.widget<RawImage>(
+      find.byKey(const Key('find_share_card_full_photo_image')),
+    );
+    expect(hero.image, same(frame.image));
+    expect(hero.fit, BoxFit.cover);
+    expect(inset.image, same(frame.image));
+    expect(inset.fit, BoxFit.contain);
+    expect(
+      tester.getSize(find.byKey(const Key('find_share_card_full_photo_inset'))),
+      FindShareCard.fullPhotoInsetSize,
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    frame.image.dispose();
   });
 }
 

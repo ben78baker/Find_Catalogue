@@ -25,7 +25,7 @@ void main() {
   testWidgets('Share Card is the default and all Stage 3 formats are shown', (
     tester,
   ) async {
-    final result = await _openOptions(tester, [_record(1, photoCount: 1)]);
+    final result = await _openOptions(tester, [_record(1, photoCount: 4)]);
 
     expect(find.text('Share 1 record'), findsOneWidget);
     expect(find.text('Share Card'), findsOneWidget);
@@ -36,8 +36,11 @@ void main() {
     expect(find.text('PDF'), findsOneWidget);
     expect(find.text('PDF + photos'), findsOneWidget);
     expect(find.text('CSV'), findsOneWidget);
+    expect(find.text('Include all photos'), findsNothing);
     expect(find.byKey(const Key('include_all_photos_toggle')), findsNothing);
     expect(find.byKey(const Key('findspot_hidden_option')), findsNothing);
+    expect(find.byKey(const Key('findspot_exact_option')), findsNothing);
+    expect(find.byKey(const Key('exact_photo_warning')), findsNothing);
     expect(find.text('1 Share Card'), findsOneWidget);
 
     await tester.ensureVisible(
@@ -48,38 +51,23 @@ void main() {
 
     final options = (await result.future)!;
     expect(options.format, FindShareFormat.shareCard);
-    expect(options.includeAllPhotos, isFalse);
     expect(options.findspotPrecision, FindspotExportPrecision.hidden);
   });
 
-  testWidgets('additional photos reveal the photo and privacy choices', (
+  testWidgets('multiple Share Cards have a card-only attachment summary', (
     tester,
   ) async {
-    final result = await _openOptions(tester, [_record(1, photoCount: 4)]);
+    await _openOptions(tester, [
+      for (var id = 1; id <= 5; id++) _record(id, photoCount: 4),
+    ]);
 
-    expect(find.byKey(const Key('include_all_photos_toggle')), findsOneWidget);
+    expect(find.text('Share 5 records'), findsOneWidget);
+    expect(find.text('5 Share Cards'), findsOneWidget);
+    expect(find.text('Include all photos'), findsNothing);
+    expect(find.byKey(const Key('include_all_photos_toggle')), findsNothing);
     expect(find.byKey(const Key('findspot_hidden_option')), findsNothing);
-    await tester.tap(find.byKey(const Key('include_all_photos_toggle')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('1 Share Card + 3 photos'), findsOneWidget);
-    expect(find.byKey(const Key('findspot_hidden_option')), findsOneWidget);
-    expect(find.byKey(const Key('findspot_exact_option')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('findspot_exact_option')));
-    await tester.tap(find.byKey(const Key('findspot_exact_option')));
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('exact_photo_warning')), findsOneWidget);
-
-    await tester.ensureVisible(
-      find.byKey(const Key('prepare_and_share_button')),
-    );
-    await tester.tap(find.byKey(const Key('prepare_and_share_button')));
-    await tester.pumpAndSettle();
-    final options = (await result.future)!;
-
-    expect(options.format, FindShareFormat.shareCard);
-    expect(options.includeAllPhotos, isTrue);
-    expect(options.findspotPrecision, FindspotExportPrecision.exact);
+    expect(find.byKey(const Key('findspot_exact_option')), findsNothing);
+    expect(find.textContaining('Share Cards +'), findsNothing);
   });
 
   testWidgets('legacy formats retain privacy choices and record count', (
@@ -91,12 +79,6 @@ void main() {
 
     expect(find.text('Share 5 records'), findsOneWidget);
     expect(find.text('5 Share Cards'), findsOneWidget);
-    await tester.ensureVisible(
-      find.byKey(const Key('include_all_photos_toggle')),
-    );
-    await tester.tap(find.byKey(const Key('include_all_photos_toggle')));
-    await tester.pumpAndSettle();
-    expect(find.text('5 Share Cards + 5 photos'), findsOneWidget);
 
     for (final format in const [
       FindShareFormat.pdf,
@@ -113,6 +95,7 @@ void main() {
     }
 
     expect(find.byKey(const Key('include_all_photos_toggle')), findsNothing);
+    expect(find.byKey(const Key('exact_photo_warning')), findsNothing);
     expect(find.text('1 PDF + photos ZIP'), findsOneWidget);
 
     await tester.ensureVisible(
@@ -123,7 +106,6 @@ void main() {
     final options = (await result.future)!;
 
     expect(options.format, FindShareFormat.pdfPhotos);
-    expect(options.includeAllPhotos, isFalse);
     expect(options.findspotPrecision, FindspotExportPrecision.hidden);
   });
 }

@@ -63,6 +63,8 @@ class FindShareCard extends StatelessWidget {
   static const outputWidth = 1080;
   static const outputHeight = 1350;
   static const appIconAsset = 'assets/branding/find_catalogue_icon_1024.png';
+  static const heroHeight = 160.0;
+  static const fullPhotoInsetSize = Size(96, 72);
 
   static const _olive = Color(0xFF465E3B);
   static const _warmSurface = Color(0xFFF7F5EF);
@@ -179,14 +181,55 @@ class _HeroPhotograph extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
       child: SizedBox(
-        height: 160,
+        height: FindShareCard.heroHeight,
         child: image == null
             ? _PhotoPlaceholder(photoStatus: photoStatus)
-            : RawImage(
-                image: image,
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                filterQuality: FilterQuality.medium,
+            : Stack(
+                fit: StackFit.expand,
+                children: [
+                  RawImage(
+                    key: const Key('find_share_card_hero_image'),
+                    image: image,
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                    filterQuality: FilterQuality.medium,
+                  ),
+                  Positioned(
+                    right: 8,
+                    bottom: 8,
+                    child: Container(
+                      key: const Key('find_share_card_full_photo_inset'),
+                      width: FindShareCard.fullPhotoInsetSize.width,
+                      height: FindShareCard.fullPhotoInsetSize.height,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(color: Colors.white, width: 1.5),
+                        borderRadius: BorderRadius.circular(11),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x40000000),
+                            blurRadius: 6,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(7),
+                        child: ColoredBox(
+                          color: Colors.white,
+                          child: RawImage(
+                            key: const Key('find_share_card_full_photo_image'),
+                            image: image,
+                            fit: BoxFit.contain,
+                            alignment: Alignment.center,
+                            filterQuality: FilterQuality.medium,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
       ),
     );

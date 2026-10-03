@@ -8,173 +8,90 @@ import 'package:find_catalogue/services/sharing/share_artifact.dart';
 import 'package:find_catalogue/services/sharing/share_dispatcher.dart';
 import 'package:find_catalogue/services/sharing/share_file_store.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:image/image.dart' as image;
 import 'package:share_plus/share_plus.dart';
 
 void main() {
-  test(
-    'four photos produce one card or one card plus photos two to four',
-    () async {
-      final directory = await Directory.systemTemp.createTemp(
-        'find_share_workflow_',
-      );
-      try {
-        final second = await _writeGpsPhoto(
-          directory,
-          'second.jpg',
-          180,
-          30,
-          20,
-        );
-        final third = await _writeGpsPhoto(directory, 'third.jpg', 20, 180, 30);
-        final fourth = await _writeGpsPhoto(
-          directory,
-          'fourth.jpg',
-          20,
-          30,
-          180,
-        );
-        final originalBytes = {
-          second.path: await second.readAsBytes(),
-          third.path: await third.readAsBytes(),
-          fourth.path: await fourth.readAsBytes(),
-        };
-        final record = _record(
-          1,
+  test('zero, one, or four photos each produce exactly one card', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_photo_counts_',
+    );
+    try {
+      final workflow = _workflow(directory);
+      final records = [
+        _record(1),
+        _record(2, photos: [_photo(1, 'primary.jpg', 0)]),
+        _record(
+          3,
           photos: [
-            _photo(1, '${directory.path}/primary.jpg', 0, FindPhotoRole.front),
-            _photo(2, second.path, 1, FindPhotoRole.reverse),
-            _photo(3, third.path, 2, FindPhotoRole.edge),
-            _photo(4, fourth.path, 3, FindPhotoRole.detail),
+            _photo(1, 'primary.jpg', 0),
+            _photo(2, 'reverse.jpg', 1),
+            _photo(3, 'edge.jpg', 2),
+            _photo(4, 'detail.jpg', 3),
           ],
-        );
-        final workflow = _workflow(directory);
+        ),
+      ];
 
-        final cardOnly = await workflow.prepare([
+      for (final record in records) {
+        final artifacts = await workflow.prepare([
           record,
         ], options: const FindShareOptions());
-        final withPhotos = await workflow.prepare([
-          record,
-        ], options: const FindShareOptions(includeAllPhotos: true));
 
-        expect(cardOnly.map((artifact) => artifact.fileName), [
-          '01_FO-000001_share_card.png',
+        expect(artifacts, hasLength(1));
+        expect(
+          artifacts.single.fileName,
+          '01_${record.logNumber}_share_card.png',
+        );
+        expect(artifacts.single.mimeType, 'image/png');
+      }
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test(
+    'multiple records preserve card order without photo artifacts',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'find_share_workflow_order_',
+      );
+      try {
+        final records = [
+          _record(
+            7,
+            photos: [
+              _photo(1, 'primary_7.jpg', 0),
+              _photo(2, 'reverse_7.jpg', 1),
+            ],
+          ),
+          _record(3),
+          _record(
+            9,
+            photos: [
+              _photo(3, 'primary_9.jpg', 0),
+              _photo(4, 'detail_9.jpg', 1),
+              _photo(5, 'edge_9.jpg', 2),
+            ],
+          ),
+        ];
+
+        final artifacts = await _workflow(
+          directory,
+        ).prepare(records, options: const FindShareOptions());
+
+        expect(artifacts.map((artifact) => artifact.fileName), [
+          '01_FO-000007_share_card.png',
+          '02_FO-000003_share_card.png',
+          '03_FO-000009_share_card.png',
         ]);
-        expect(withPhotos.map((artifact) => artifact.fileName), [
-          '01_FO-000001_share_card.png',
-          '01_FO-000001_02_reverse_second.jpg',
-          '01_FO-000001_03_edge_third.jpg',
-          '01_FO-000001_04_detail_fourth.jpg',
-        ]);
-        for (final artifact in withPhotos.skip(1)) {
-          final decoded = image.decodeJpg(
-            await File(artifact.path).readAsBytes(),
-          )!;
-          expect(decoded.exif.gpsIfd.hasGPSLatitude, isFalse);
-          expect(decoded.exif.gpsIfd.hasGPSLongitude, isFalse);
-        }
-        for (final entry in originalBytes.entries) {
-          expect(await File(entry.key).readAsBytes(), entry.value);
-        }
+        expect(
+          artifacts.every((artifact) => artifact.mimeType == 'image/png'),
+          isTrue,
+        );
       } finally {
         await directory.delete(recursive: true);
       }
     },
   );
-
-  test('exact additional-photo mode preserves source bytes', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'find_share_workflow_exact_',
-    );
-    try {
-      final additional = await _writeGpsPhoto(
-        directory,
-        'additional.jpg',
-        60,
-        120,
-        180,
-      );
-      final originalBytes = await additional.readAsBytes();
-      final artifacts = await _workflow(directory).prepare(
-        [
-          _record(
-            1,
-            photos: [
-              _photo(
-                1,
-                '${directory.path}/primary.jpg',
-                0,
-                FindPhotoRole.front,
-              ),
-              _photo(2, additional.path, 1, FindPhotoRole.reverse),
-            ],
-          ),
-        ],
-        options: const FindShareOptions(
-          includeAllPhotos: true,
-          findspotPrecision: FindspotExportPrecision.exact,
-        ),
-      );
-
-      expect(artifacts, hasLength(2));
-      expect(await File(artifacts[1].path).readAsBytes(), originalBytes);
-      expect(await additional.readAsBytes(), originalBytes);
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  });
-
-  test('multiple records preserve record-by-record artifact order', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'find_share_workflow_order_',
-    );
-    try {
-      final firstAdditional = await _writeGpsPhoto(
-        directory,
-        'first_extra.jpg',
-        100,
-        80,
-        60,
-      );
-      final secondAdditional = await _writeGpsPhoto(
-        directory,
-        'second_extra.jpg',
-        60,
-        80,
-        100,
-      );
-      final records = [
-        _record(
-          7,
-          photos: [
-            _photo(1, 'primary_7.jpg', 0, FindPhotoRole.front),
-            _photo(2, firstAdditional.path, 1, FindPhotoRole.reverse),
-          ],
-        ),
-        _record(
-          3,
-          photos: [
-            _photo(3, 'primary_3.jpg', 0, FindPhotoRole.front),
-            _photo(4, secondAdditional.path, 1, FindPhotoRole.detail),
-          ],
-        ),
-      ];
-
-      final artifacts = await _workflow(directory).prepare(
-        records,
-        options: const FindShareOptions(includeAllPhotos: true),
-      );
-
-      expect(artifacts.map((artifact) => artifact.fileName), [
-        '01_FO-000007_share_card.png',
-        '01_FO-000007_02_reverse_first_extra.jpg',
-        '02_FO-000003_share_card.png',
-        '02_FO-000003_02_detail_second_extra.jpg',
-      ]);
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  });
 
   test('cancellation is observed between records', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -202,69 +119,6 @@ void main() {
 
       expect(generator.generatedIds, [1]);
       expect(progress.any((item) => item.completedRecords == 1), isTrue);
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  });
-
-  test('an unavailable additional photo fails visibly', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'find_share_workflow_missing_',
-    );
-    try {
-      final future = _workflow(directory).prepare([
-        _record(
-          1,
-          photos: [
-            _photo(1, 'primary.jpg', 0, FindPhotoRole.front),
-            _photo(2, 'missing.jpg', 1, FindPhotoRole.reverse),
-          ],
-        ),
-      ], options: const FindShareOptions(includeAllPhotos: true));
-
-      await expectLater(
-        future,
-        throwsA(
-          isA<FindSharePreparationException>().having(
-            (error) => error.message,
-            'message',
-            allOf(contains('FO-000001'), contains('unavailable')),
-          ),
-        ),
-      );
-    } finally {
-      await directory.delete(recursive: true);
-    }
-  });
-
-  test('a corrupt hidden additional photo fails without changing it', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'find_share_workflow_corrupt_',
-    );
-    try {
-      final corrupt = File('${directory.path}/corrupt.jpg');
-      const originalBytes = [1, 2, 3, 4, 5];
-      await corrupt.writeAsBytes(originalBytes);
-
-      await expectLater(
-        _workflow(directory).prepare([
-          _record(
-            1,
-            photos: [
-              _photo(1, 'primary.jpg', 0, FindPhotoRole.front),
-              _photo(2, corrupt.path, 1, FindPhotoRole.reverse),
-            ],
-          ),
-        ], options: const FindShareOptions(includeAllPhotos: true)),
-        throwsA(
-          isA<FindSharePreparationException>().having(
-            (error) => error.message,
-            'message',
-            contains('metadata could not be removed safely'),
-          ),
-        ),
-      );
-      expect(await corrupt.readAsBytes(), originalBytes);
     } finally {
       await directory.delete(recursive: true);
     }
@@ -310,7 +164,7 @@ void main() {
     }
   });
 
-  test('prepared artifacts are dispatched together in their order', () async {
+  test('prepared Share Cards are dispatched together in order', () async {
     ShareParams? captured;
     final directory = await Directory.systemTemp.createTemp(
       'find_share_workflow_dispatch_',
@@ -332,23 +186,24 @@ void main() {
           mimeType: 'image/png',
         ),
         ShareArtifact(
-          path: '/tmp/second.jpg',
-          fileName: 'second.jpg',
-          mimeType: 'image/jpeg',
+          path: '/tmp/second.png',
+          fileName: 'second.png',
+          mimeType: 'image/png',
         ),
       ];
 
       await workflow.dispatch(
         artifacts,
-        records: [_record(1)],
-        options: const FindShareOptions(includeAllPhotos: true),
+        records: [_record(1), _record(2)],
+        options: const FindShareOptions(),
       );
 
       expect(captured!.files!.map((file) => file.name), [
         'first.png',
-        'second.jpg',
+        'second.png',
       ]);
       expect(captured!.subject, 'Find Catalogue Share Cards');
+      expect(captured!.text, '2 Find Catalogue Share Cards.');
     } finally {
       await directory.delete(recursive: true);
     }
@@ -413,31 +268,15 @@ class _TrackingRecordExportService extends RecordExportService {
   }
 }
 
-Future<File> _writeGpsPhoto(
-  Directory directory,
-  String name,
-  int red,
-  int green,
-  int blue,
-) async {
-  final source = image.Image(width: 8, height: 6);
-  image.fill(source, color: image.ColorRgb8(red, green, blue));
-  source.exif.gpsIfd.setGpsLocation(latitude: 51.123456, longitude: -1.234567);
-  final file = File('${directory.path}/$name');
-  await file.writeAsBytes(image.encodeJpg(source, quality: 100));
-  return file;
-}
-
-FindPhoto _photo(int id, String path, int sortOrder, FindPhotoRole role) =>
-    FindPhoto(
-      id: id,
-      path: path,
-      role: role,
-      source: FindPhotoSource.camera,
-      createdAt: DateTime(2026, 8, 20),
-      isOriginalEvidence: true,
-      sortOrder: sortOrder,
-    );
+FindPhoto _photo(int id, String path, int sortOrder) => FindPhoto(
+  id: id,
+  path: path,
+  role: FindPhotoRole.front,
+  source: FindPhotoSource.camera,
+  createdAt: DateTime(2026, 8, 20),
+  isOriginalEvidence: true,
+  sortOrder: sortOrder,
+);
 
 FindRecord _record(int id, {List<FindPhoto> photos = const []}) {
   final now = DateTime(2026, 8, 30, 12);
