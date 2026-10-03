@@ -51,8 +51,7 @@ Future<void> shareFindRecords(
     builder: (_) => _SharePreparationDialog(
       progress: progress,
       cancellationToken: cancellationToken,
-      canCancel:
-          options.format == FindShareFormat.shareCard && selected.length > 1,
+      canCancel: options.format != FindShareFormat.csv && selected.length > 1,
     ),
   ).whenComplete(() => progressDialogOpen = false);
   await Future<void>.delayed(Duration.zero);

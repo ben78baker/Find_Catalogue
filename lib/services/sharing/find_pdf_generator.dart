@@ -148,26 +148,6 @@ class FindPdfGenerator {
       throw ArgumentError('At least one record is required.');
     }
     final icon = pw.MemoryImage(await _preparedBrandIcon());
-    final preparedRecords = <_PreparedPdfRecord>[];
-    for (final record in records) {
-      _throwIfCancelled(isCancelled);
-      final data = _recordFactory.create(
-        record,
-        findspotPrecision: findspotPrecision,
-      );
-      final photos = <PreparedFindPdfPhoto?>[];
-      final selectedPhotos = kind == FindPdfDocumentKind.summary
-          ? data.photos.take(1)
-          : data.photos;
-      for (final photo in selectedPhotos) {
-        _throwIfCancelled(isCancelled);
-        photos.add(await _photoPreparer.prepare(photo.path));
-      }
-      preparedRecords.add(_PreparedPdfRecord(data: data, photos: photos));
-      onProgress?.call(preparedRecords.length, records.length);
-    }
-    _throwIfCancelled(isCancelled);
-
     final document = pw.Document(
       compress: compress,
       title: kind == FindPdfDocumentKind.summary
@@ -177,11 +157,60 @@ class FindPdfGenerator {
       creator: 'Find Catalogue',
     );
     if (kind == FindPdfDocumentKind.summary) {
+      final preparedRecords = <_PreparedPdfRecord>[];
+      for (final record in records) {
+        preparedRecords.add(
+          await _prepareRecord(
+            record,
+            kind: kind,
+            findspotPrecision: findspotPrecision,
+            isCancelled: isCancelled,
+          ),
+        );
+        onProgress?.call(preparedRecords.length, records.length);
+      }
       _addSummaryPages(document, preparedRecords, icon, findspotPrecision);
     } else {
-      _addFullRecordPages(document, preparedRecords, icon, findspotPrecision);
+      for (final entry in records.indexed) {
+        final preparedRecord = await _prepareRecord(
+          entry.$2,
+          kind: kind,
+          findspotPrecision: findspotPrecision,
+          isCancelled: isCancelled,
+        );
+        _addFullRecordPages(
+          document,
+          [preparedRecord],
+          icon,
+          findspotPrecision,
+        );
+        onProgress?.call(entry.$1 + 1, records.length);
+      }
     }
+    _throwIfCancelled(isCancelled);
     return document.save();
+  }
+
+  Future<_PreparedPdfRecord> _prepareRecord(
+    FindRecord record, {
+    required FindPdfDocumentKind kind,
+    required FindspotExportPrecision findspotPrecision,
+    FindPdfCancellationCheck? isCancelled,
+  }) async {
+    _throwIfCancelled(isCancelled);
+    final data = _recordFactory.create(
+      record,
+      findspotPrecision: findspotPrecision,
+    );
+    final photos = <PreparedFindPdfPhoto?>[];
+    final selectedPhotos = kind == FindPdfDocumentKind.summary
+        ? data.photos.take(1)
+        : data.photos;
+    for (final photo in selectedPhotos) {
+      _throwIfCancelled(isCancelled);
+      photos.add(await _photoPreparer.prepare(photo.path));
+    }
+    return _PreparedPdfRecord(data: data, photos: photos);
   }
 
   void _addSummaryPages(
@@ -252,18 +281,7 @@ class FindPdfGenerator {
             pw.SizedBox(height: 6),
             _privacyNote(findspotPrecision),
             pw.SizedBox(height: 14),
-            _fieldTable(record.data.fullFields),
-            pw.SizedBox(height: 16),
-            if (record.data.photos.isEmpty)
-              _photoPlaceholder('No photograph recorded')
-            else ...[
-              _sectionHeading('Primary photograph'),
-              pw.SizedBox(height: 6),
-              _fullPhoto(
-                record.photos.isEmpty ? null : record.photos.first,
-                record.data.photos.first.caption,
-              ),
-            ],
+            _fullRecordOverview(record),
             ..._textSection('Observations', record.data.observations),
             ..._textSection(
               'Research reasoning and notes',
@@ -368,6 +386,65 @@ class FindPdfGenerator {
           ),
         ],
       ),
+    );
+  }
+
+  pw.Widget _fullRecordOverview(_PreparedPdfRecord record) {
+    if (record.data.photos.isEmpty) {
+      return pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          _fieldTable(record.data.fullFields),
+          pw.SizedBox(height: 14),
+          pw.Container(
+            height: 72,
+            width: double.infinity,
+            child: _photoPlaceholder('No photograph recorded'),
+          ),
+        ],
+      );
+    }
+    final primary = record.photos.isEmpty ? null : record.photos.first;
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Expanded(flex: 6, child: _fieldTable(record.data.fullFields)),
+        pw.SizedBox(width: 14),
+        pw.Expanded(
+          flex: 5,
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _sectionHeading('Primary photograph'),
+              pw.SizedBox(height: 6),
+              pw.Container(
+                height: 245,
+                width: double.infinity,
+                padding: const pw.EdgeInsets.all(5),
+                decoration: pw.BoxDecoration(
+                  color: _warmSurface,
+                  border: pw.Border.all(color: _outline, width: 0.6),
+                  borderRadius: pw.BorderRadius.circular(6),
+                ),
+                child: primary == null
+                    ? _photoPlaceholder('Photograph unavailable')
+                    : pw.Image(
+                        pw.MemoryImage(primary.bytes),
+                        fit: pw.BoxFit.contain,
+                      ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Text(
+                record.data.photos.first.caption,
+                style: const pw.TextStyle(
+                  fontSize: 8.5,
+                  color: PdfColors.grey700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

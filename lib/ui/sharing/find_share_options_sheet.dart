@@ -97,12 +97,7 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
                           contentPadding: EdgeInsets.zero,
                           secondary: const Icon(Icons.location_off_outlined),
                           title: const Text('Hidden'),
-                          subtitle: Text(
-                            _format == FindShareFormat.pdfPhotos
-                                ? 'Exact coordinates are hidden and bundled '
-                                      'photo copies have metadata removed.'
-                                : 'Exact coordinates are not included.',
-                          ),
+                          subtitle: Text('Exact coordinates are not included.'),
                         ),
                         RadioListTile<FindspotExportPrecision>(
                           key: const Key('findspot_exact_option'),
@@ -173,37 +168,40 @@ class _FindShareOptionsSheetState extends State<FindShareOptionsSheet> {
   }
 
   String _attachmentSummary() {
+    final count = widget.records.length;
+    final records = '$count record${count == 1 ? '' : 's'}';
     if (_format == FindShareFormat.shareCard) {
-      final cards = widget.records.length;
-      return '$cards Share Card${cards == 1 ? '' : 's'}';
+      return '$count Share Card${count == 1 ? '' : 's'}';
     }
     return switch (_format) {
-      FindShareFormat.pdf => '1 PDF',
-      FindShareFormat.pdfPhotos => '1 PDF + photos ZIP',
-      FindShareFormat.csv => '1 CSV',
+      FindShareFormat.pdfSummary => '1 PDF Summary · $records',
+      FindShareFormat.pdfFullRecord => '1 PDF Full Record · $records',
+      FindShareFormat.csv => '1 CSV · $records',
       FindShareFormat.shareCard => throw StateError('Handled above'),
     };
   }
 
   String _formatLabel(FindShareFormat format) => switch (format) {
     FindShareFormat.shareCard => 'Share Card',
-    FindShareFormat.pdf => 'PDF',
-    FindShareFormat.pdfPhotos => 'PDF + photos',
+    FindShareFormat.pdfSummary => 'PDF Summary',
+    FindShareFormat.pdfFullRecord => 'PDF Full Record',
     FindShareFormat.csv => 'CSV',
   };
 
   String _formatDescription(FindShareFormat format) => switch (format) {
     FindShareFormat.shareCard => 'Branded image for social media and messaging',
-    FindShareFormat.pdf => 'Read-only record report',
-    FindShareFormat.pdfPhotos =>
-      'ZIP bundle with the report and saveable image files',
-    FindShareFormat.csv => 'Editable spreadsheet file',
+    FindShareFormat.pdfSummary =>
+      'Concise printable summary with the primary photograph',
+    FindShareFormat.pdfFullRecord =>
+      'Complete readable record with all photographs and notes',
+    FindShareFormat.csv =>
+      'Structured record data for spreadsheets and other software',
   };
 
   IconData _formatIcon(FindShareFormat format) => switch (format) {
     FindShareFormat.shareCard => Icons.image_outlined,
-    FindShareFormat.pdf => Icons.picture_as_pdf_outlined,
-    FindShareFormat.pdfPhotos => Icons.folder_zip_outlined,
+    FindShareFormat.pdfSummary => Icons.picture_as_pdf_outlined,
+    FindShareFormat.pdfFullRecord => Icons.menu_book_outlined,
     FindShareFormat.csv => Icons.table_view_outlined,
   };
 }

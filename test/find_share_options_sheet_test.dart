@@ -22,7 +22,7 @@ void main() {
     expect(selected.map((record) => record.id), [2, 3]);
   });
 
-  testWidgets('Share Card is the default and all Stage 3 formats are shown', (
+  testWidgets('Share Card is the default and Stage 4 formats are shown', (
     tester,
   ) async {
     final result = await _openOptions(tester, [_record(1, photoCount: 4)]);
@@ -33,9 +33,11 @@ void main() {
       find.text('Branded image for social media and messaging'),
       findsOneWidget,
     );
-    expect(find.text('PDF'), findsOneWidget);
-    expect(find.text('PDF + photos'), findsOneWidget);
+    expect(find.text('PDF Summary'), findsOneWidget);
+    expect(find.text('PDF Full Record'), findsOneWidget);
     expect(find.text('CSV'), findsOneWidget);
+    expect(find.text('PDF'), findsNothing);
+    expect(find.text('PDF + photos'), findsNothing);
     expect(find.text('Include all photos'), findsNothing);
     expect(find.byKey(const Key('include_all_photos_toggle')), findsNothing);
     expect(find.byKey(const Key('findspot_hidden_option')), findsNothing);
@@ -70,7 +72,7 @@ void main() {
     expect(find.textContaining('Share Cards +'), findsNothing);
   });
 
-  testWidgets('legacy formats retain privacy choices and record count', (
+  testWidgets('document formats retain privacy choices and record count', (
     tester,
   ) async {
     final result = await _openOptions(tester, [
@@ -81,9 +83,9 @@ void main() {
     expect(find.text('5 Share Cards'), findsOneWidget);
 
     for (final format in const [
-      FindShareFormat.pdf,
+      FindShareFormat.pdfSummary,
       FindShareFormat.csv,
-      FindShareFormat.pdfPhotos,
+      FindShareFormat.pdfFullRecord,
     ]) {
       await tester.ensureVisible(
         find.byKey(Key('share_format_${format.name}')),
@@ -96,7 +98,7 @@ void main() {
 
     expect(find.byKey(const Key('include_all_photos_toggle')), findsNothing);
     expect(find.byKey(const Key('exact_photo_warning')), findsNothing);
-    expect(find.text('1 PDF + photos ZIP'), findsOneWidget);
+    expect(find.text('1 PDF Full Record · 5 records'), findsOneWidget);
 
     await tester.ensureVisible(
       find.byKey(const Key('prepare_and_share_button')),
@@ -105,7 +107,7 @@ void main() {
     await tester.pumpAndSettle();
     final options = (await result.future)!;
 
-    expect(options.format, FindShareFormat.pdfPhotos);
+    expect(options.format, FindShareFormat.pdfFullRecord);
     expect(options.findspotPrecision, FindspotExportPrecision.hidden);
   });
 }

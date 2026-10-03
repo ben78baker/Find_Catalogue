@@ -9,6 +9,7 @@ import '../services/location_capture_service.dart';
 import '../services/photo_capture_service.dart';
 import 'find_map_screen.dart';
 import 'formatters.dart';
+import 'export_records.dart';
 import 'record_detail_screen.dart';
 import 'share_records.dart';
 
@@ -324,26 +325,46 @@ class _RecordsScreenState extends State<RecordsScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  TextButton.icon(
-                    key: const Key('map_record_list_button'),
-                    onPressed: mapped.isEmpty ? null : () => _openMap(records),
-                    icon: const Icon(Icons.map_outlined),
-                    label: Text('Map (${mapped.length})'),
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const Key('map_record_list_button'),
+                      onPressed: mapped.isEmpty
+                          ? null
+                          : () => _openMap(records),
+                      icon: const Icon(Icons.map_outlined),
+                      label: Text('Map (${mapped.length})'),
+                    ),
                   ),
-                  TextButton.icon(
-                    key: const Key('share_record_list_button'),
-                    onPressed: records.isEmpty
-                        ? null
-                        : () => shareFindRecords(
-                            context,
-                            records,
-                            chooseDateRange: true,
-                          ),
-                    icon: const Icon(Icons.ios_share),
-                    label: Text(
-                      _search.text.trim().isEmpty && _filterCount == 0
-                          ? 'Share records'
-                          : 'Share ${records.length} matching',
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const Key('share_record_list_button'),
+                      onPressed: records.isEmpty
+                          ? null
+                          : () => shareFindRecords(
+                              context,
+                              records,
+                              chooseDateRange: true,
+                            ),
+                      icon: const Icon(Icons.ios_share),
+                      label: Text(
+                        _search.text.trim().isEmpty && _filterCount == 0
+                            ? 'Share'
+                            : 'Share ${records.length}',
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: TextButton.icon(
+                      key: const Key('export_record_list_button'),
+                      onPressed: records.isEmpty
+                          ? null
+                          : () => exportFindRecords(context, records),
+                      icon: const Icon(Icons.file_download_outlined),
+                      label: Text(
+                        _search.text.trim().isEmpty && _filterCount == 0
+                            ? 'Export'
+                            : 'Export ${records.length}',
+                      ),
                     ),
                   ),
                 ],

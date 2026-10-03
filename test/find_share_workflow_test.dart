@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:find_catalogue/domain/find_record.dart';
 import 'package:find_catalogue/services/record_export_service.dart';
+import 'package:find_catalogue/services/sharing/find_pdf_generator.dart';
 import 'package:find_catalogue/services/sharing/find_share_card_generator.dart';
 import 'package:find_catalogue/services/sharing/find_share_workflow.dart';
 import 'package:find_catalogue/services/sharing/share_artifact.dart';
@@ -124,7 +125,7 @@ void main() {
     }
   });
 
-  test('legacy formats map to the unchanged record exporters', () async {
+  test('document formats map to the intended record exporters', () async {
     final directory = await Directory.systemTemp.createTemp(
       'find_share_workflow_legacy_',
     );
@@ -140,8 +141,8 @@ void main() {
       );
 
       for (final format in const [
-        FindShareFormat.pdf,
-        FindShareFormat.pdfPhotos,
+        FindShareFormat.pdfSummary,
+        FindShareFormat.pdfFullRecord,
         FindShareFormat.csv,
       ]) {
         await workflow.prepare(
@@ -154,8 +155,8 @@ void main() {
       }
 
       expect(exporter.formats, [
-        RecordExportFormat.pdf,
-        RecordExportFormat.pdfBundle,
+        RecordExportFormat.pdfSummary,
+        RecordExportFormat.pdfFullRecord,
         RecordExportFormat.csv,
       ]);
       expect(exporter.precisions, everyElement(FindspotExportPrecision.exact));
@@ -208,6 +209,54 @@ void main() {
       await directory.delete(recursive: true);
     }
   });
+
+  test('Summary and Full Record each dispatch one PDF artifact', () async {
+    for (final format in const [
+      FindShareFormat.pdfSummary,
+      FindShareFormat.pdfFullRecord,
+    ]) {
+      ShareParams? captured;
+      final directory = await Directory.systemTemp.createTemp(
+        'find_share_workflow_pdf_dispatch_',
+      );
+      try {
+        final exporter = _TrackingRecordExportService();
+        final workflow = FindShareWorkflow(
+          cardGenerator: _FakeCardGenerator(),
+          recordExportService: exporter,
+          shareDispatcher: ShareDispatcher(
+            shareInvoker: (parameters) async {
+              captured = parameters;
+              return const ShareResult('test', ShareResultStatus.success);
+            },
+          ),
+          shareFileStore: ShareFileStore(
+            temporaryDirectoryProvider: () async => directory,
+          ),
+        );
+        final options = FindShareOptions(format: format);
+
+        final artifacts = await workflow.prepare([
+          _record(1),
+          _record(2),
+        ], options: options);
+        await workflow.dispatch(
+          artifacts,
+          records: [_record(1), _record(2)],
+          options: options,
+        );
+
+        expect(artifacts, hasLength(1));
+        expect(captured!.files, hasLength(1));
+        expect(
+          captured!.files!.single.name,
+          'export.${exporter.formats.single.name}',
+        );
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    }
+  });
 }
 
 FindShareWorkflow _workflow(
@@ -257,6 +306,8 @@ class _TrackingRecordExportService extends RecordExportService {
     List<FindRecord> records, {
     required RecordExportFormat format,
     required FindspotExportPrecision findspotPrecision,
+    FindPdfProgressCallback? onProgress,
+    FindPdfCancellationCheck? isCancelled,
   }) async {
     formats.add(format);
     precisions.add(findspotPrecision);

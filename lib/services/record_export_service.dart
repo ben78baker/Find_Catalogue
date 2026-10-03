@@ -199,20 +199,28 @@ class RecordExportService {
     List<FindRecord> records, {
     required FindspotExportPrecision findspotPrecision,
     bool compress = true,
+    FindPdfProgressCallback? onProgress,
+    FindPdfCancellationCheck? isCancelled,
   }) => _findPdfGenerator.buildSummary(
     records,
     findspotPrecision: findspotPrecision,
     compress: compress,
+    onProgress: onProgress,
+    isCancelled: isCancelled,
   );
 
   Future<Uint8List> buildFullRecordPdf(
     List<FindRecord> records, {
     required FindspotExportPrecision findspotPrecision,
     bool compress = true,
+    FindPdfProgressCallback? onProgress,
+    FindPdfCancellationCheck? isCancelled,
   }) => _findPdfGenerator.buildFullRecord(
     records,
     findspotPrecision: findspotPrecision,
     compress: compress,
+    onProgress: onProgress,
+    isCancelled: isCancelled,
   );
 
   Future<Uint8List> buildBundle(
@@ -341,6 +349,8 @@ class RecordExportService {
     List<FindRecord> records, {
     required RecordExportFormat format,
     required FindspotExportPrecision findspotPrecision,
+    FindPdfProgressCallback? onProgress,
+    FindPdfCancellationCheck? isCancelled,
   }) async {
     if (records.isEmpty) {
       throw ArgumentError('At least one record is required.');
@@ -370,11 +380,15 @@ class RecordExportService {
       bytes = await buildSummaryPdf(
         records,
         findspotPrecision: findspotPrecision,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
       );
     } else if (format == RecordExportFormat.pdfFullRecord) {
       bytes = await buildFullRecordPdf(
         records,
         findspotPrecision: findspotPrecision,
+        onProgress: onProgress,
+        isCancelled: isCancelled,
       );
     } else {
       bytes = await buildBundle(records, findspotPrecision: findspotPrecision);

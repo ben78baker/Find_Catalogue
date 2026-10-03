@@ -2,12 +2,13 @@ import 'dart:ui' show Rect;
 
 import '../../domain/find_record.dart';
 import '../record_export_service.dart';
+import 'find_pdf_generator.dart';
 import 'find_share_card_generator.dart';
 import 'share_artifact.dart';
 import 'share_dispatcher.dart';
 import 'share_file_store.dart';
 
-enum FindShareFormat { shareCard, pdf, pdfPhotos, csv }
+enum FindShareFormat { shareCard, pdfSummary, pdfFullRecord, csv }
 
 class FindShareOptions {
   const FindShareOptions({
@@ -104,11 +105,24 @@ class FindShareWorkflow {
 
     if (options.format != FindShareFormat.shareCard) {
       cancellationToken?.throwIfCancelled();
-      final artifact = await _recordExportService.prepareShareArtifact(
-        records,
-        format: _recordExportFormat(options.format),
-        findspotPrecision: options.findspotPrecision,
-      );
+      late final ShareArtifact artifact;
+      try {
+        artifact = await _recordExportService.prepareShareArtifact(
+          records,
+          format: _recordExportFormat(options.format),
+          findspotPrecision: options.findspotPrecision,
+          onProgress: (completed, total) => onProgress?.call(
+            FindShareProgress(
+              completedRecords: completed,
+              totalRecords: total,
+              message: 'Prepared $completed of $total records',
+            ),
+          ),
+          isCancelled: () => cancellationToken?.isCancelled ?? false,
+        );
+      } on FindPdfGenerationCancelledException {
+        throw const FindSharePreparationCancelled();
+      }
       onProgress?.call(
         FindShareProgress(
           completedRecords: records.length,
@@ -167,8 +181,10 @@ class FindShareWorkflow {
     artifacts: artifacts,
     subject: options.format == FindShareFormat.shareCard
         ? 'Find Catalogue Share Cards'
-        : options.format == FindShareFormat.pdfPhotos
-        ? 'Find Catalogue records and photographs'
+        : options.format == FindShareFormat.pdfSummary
+        ? 'Find Catalogue PDF Summary'
+        : options.format == FindShareFormat.pdfFullRecord
+        ? 'Find Catalogue PDF Full Record'
         : 'Find Catalogue records',
     text: options.format == FindShareFormat.shareCard
         ? '${records.length} Find Catalogue Share '
@@ -179,8 +195,8 @@ class FindShareWorkflow {
 
   RecordExportFormat _recordExportFormat(FindShareFormat format) =>
       switch (format) {
-        FindShareFormat.pdf => RecordExportFormat.pdf,
-        FindShareFormat.pdfPhotos => RecordExportFormat.pdfBundle,
+        FindShareFormat.pdfSummary => RecordExportFormat.pdfSummary,
+        FindShareFormat.pdfFullRecord => RecordExportFormat.pdfFullRecord,
         FindShareFormat.csv => RecordExportFormat.csv,
         FindShareFormat.shareCard => throw ArgumentError.value(
           format,
