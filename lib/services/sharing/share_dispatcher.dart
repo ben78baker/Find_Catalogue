@@ -22,7 +22,7 @@ class ShareDispatcher {
       throw ArgumentError('At least one share artifact is required.');
     }
 
-    await _shareInvoker(
+    final result = await _shareInvoker(
       ShareParams(
         subject: subject,
         text: text,
@@ -38,5 +38,8 @@ class ShareDispatcher {
             sharePositionOrigin ?? const Rect.fromLTWH(0, 0, 1, 1),
       ),
     );
+    if (result.status == ShareResultStatus.unavailable) {
+      throw StateError('Sharing is not available on this device.');
+    }
   }
 }

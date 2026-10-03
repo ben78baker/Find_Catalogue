@@ -1,33 +1,37 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:flutter/material.dart' show Rect;
-import 'package:image/image.dart' as image;
 import 'package:path/path.dart' as path;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../domain/find_record.dart';
 import '../ui/formatters.dart';
+import 'sharing/findspot_export_precision.dart';
 import 'sharing/share_artifact.dart';
 import 'sharing/share_dispatcher.dart';
 import 'sharing/share_file_store.dart';
+import 'sharing/share_photo_processor.dart';
+
+export 'sharing/findspot_export_precision.dart';
 
 enum RecordExportFormat { csv, pdf, pdfBundle }
-
-enum FindspotExportPrecision { hidden, exact }
 
 class RecordExportService {
   RecordExportService({
     ShareDispatcher? shareDispatcher,
     ShareFileStore? shareFileStore,
+    SharePhotoProcessor? sharePhotoProcessor,
   }) : _shareDispatcher = shareDispatcher ?? ShareDispatcher(),
-       _shareFileStore = shareFileStore ?? ShareFileStore();
+       _shareFileStore = shareFileStore ?? ShareFileStore(),
+       _sharePhotoProcessor =
+           sharePhotoProcessor ?? const SharePhotoProcessor();
 
   final ShareDispatcher _shareDispatcher;
   final ShareFileStore _shareFileStore;
+  final SharePhotoProcessor _sharePhotoProcessor;
 
   String buildCsv(
     List<FindRecord> records, {
@@ -207,35 +211,25 @@ class RecordExportService {
     for (final record in records) {
       for (final entry in record.photos.indexed) {
         final photo = entry.$2;
-        final file = File(photo.path);
-        if (!await file.exists()) {
-          omittedPhotos.add(
-            '${record.logNumber}: ${enumLabel(photo.role)} (file unavailable)',
+        final originalName = path.basenameWithoutExtension(photo.path);
+        late final ProcessedSharePhoto processed;
+        try {
+          processed = await _sharePhotoProcessor.process(
+            photo.path,
+            findspotPrecision: findspotPrecision,
           );
-          continue;
-        }
-        var bytes = await file.readAsBytes();
-        final originalName = path.basenameWithoutExtension(file.path);
-        var extension = path.extension(file.path).toLowerCase();
-        if (findspotPrecision == FindspotExportPrecision.hidden) {
-          final decoded = image.decodeImage(bytes);
-          if (decoded == null) {
+        } on SharePhotoProcessingException catch (error) {
+          if (error.failure == SharePhotoProcessingFailure.unavailable) {
+            omittedPhotos.add(
+              '${record.logNumber}: ${enumLabel(photo.role)} (file unavailable)',
+            );
+          } else {
             omittedPhotos.add(
               '${record.logNumber}: ${enumLabel(photo.role)} '
               '(image metadata could not be removed safely)',
             );
-            continue;
           }
-          final sanitised = image.bakeOrientation(decoded)
-            ..exif.clear()
-            ..textData = null
-            ..iccProfile = null;
-          if (extension == '.png') {
-            bytes = image.encodePng(sanitised);
-          } else {
-            bytes = image.encodeJpg(sanitised, quality: 95);
-            extension = '.jpg';
-          }
+          continue;
         }
         final name = [
           (entry.$1 + 1).toString().padLeft(2, '0'),
@@ -244,9 +238,9 @@ class RecordExportService {
         ].join('_');
         archive.addFile(
           ArchiveFile(
-            'photos/${record.logNumber}/$name$extension',
-            bytes.length,
-            bytes,
+            'photos/${record.logNumber}/$name${processed.extension}',
+            processed.bytes.length,
+            processed.bytes,
           ),
         );
         includedPhotos++;

@@ -36,6 +36,27 @@ class FindShareCardGenerator {
   Future<ShareArtifact> generateOne(FindRecord record) async =>
       (await generateMany([record])).single;
 
+  Future<ShareArtifact> generateToSession(
+    FindRecord record, {
+    required ShareFileSession session,
+    required int sequence,
+  }) async {
+    final brandingImage = await _imageDecoder.decodeAsset(
+      FindShareCard.appIconAsset,
+      targetWidth: 84,
+    );
+    try {
+      return await _generateCard(
+        record,
+        session: session,
+        sequence: sequence,
+        brandingImage: brandingImage,
+      );
+    } finally {
+      brandingImage.dispose();
+    }
+  }
+
   Future<List<ShareArtifact>> generateMany(List<FindRecord> records) async {
     if (records.isEmpty) {
       throw ArgumentError('At least one find record is required.');
@@ -50,52 +71,66 @@ class FindShareCardGenerator {
     final artifacts = <ShareArtifact>[];
     try {
       for (final entry in records.indexed) {
-        var data = _factory.create(entry.$2);
-        ui.Image? heroImage;
-        if (data.heroPhotoPath != null) {
-          final file = File(data.heroPhotoPath!);
-          if (await file.exists()) {
-            try {
-              heroImage = await _imageDecoder.decodeFile(
-                file.path,
-                targetWidth: FindShareCard.outputWidth,
-              );
-            } catch (_) {
-              data = data.withUnavailablePhoto();
-            }
-          } else {
-            data = data.withUnavailablePhoto();
-          }
-        }
-
-        try {
-          final pngBytes = await _renderer.renderPng(
-            Directionality(
-              textDirection: TextDirection.ltr,
-              child: FindShareCard(
-                data: data,
-                heroImage: heroImage,
-                brandingImage: brandingImage,
-              ),
-            ),
-          );
-          final sequence = (entry.$1 + 1).toString().padLeft(2, '0');
-          final logNumber = _safeFileComponent(data.logNumber);
-          artifacts.add(
-            await session.writeArtifact(
-              fileName: '${sequence}_${logNumber}_share_card.png',
-              mimeType: 'image/png',
-              bytes: pngBytes,
-            ),
-          );
-        } finally {
-          heroImage?.dispose();
-        }
+        artifacts.add(
+          await _generateCard(
+            entry.$2,
+            session: session,
+            sequence: entry.$1 + 1,
+            brandingImage: brandingImage,
+          ),
+        );
       }
     } finally {
       brandingImage.dispose();
     }
     return artifacts;
+  }
+
+  Future<ShareArtifact> _generateCard(
+    FindRecord record, {
+    required ShareFileSession session,
+    required int sequence,
+    required ui.Image brandingImage,
+  }) async {
+    var data = _factory.create(record);
+    ui.Image? heroImage;
+    if (data.heroPhotoPath != null) {
+      final file = File(data.heroPhotoPath!);
+      if (await file.exists()) {
+        try {
+          heroImage = await _imageDecoder.decodeFile(
+            file.path,
+            targetWidth: FindShareCard.outputWidth,
+          );
+        } catch (_) {
+          data = data.withUnavailablePhoto();
+        }
+      } else {
+        data = data.withUnavailablePhoto();
+      }
+    }
+
+    try {
+      final pngBytes = await _renderer.renderPng(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: FindShareCard(
+            data: data,
+            heroImage: heroImage,
+            brandingImage: brandingImage,
+          ),
+        ),
+      );
+      final prefix = sequence.toString().padLeft(2, '0');
+      final logNumber = _safeFileComponent(data.logNumber);
+      return session.writeArtifact(
+        fileName: '${prefix}_${logNumber}_share_card.png',
+        mimeType: 'image/png',
+        bytes: pngBytes,
+      );
+    } finally {
+      heroImage?.dispose();
+    }
   }
 
   String _safeFileComponent(String value) {

@@ -1,0 +1,471 @@
+import 'dart:io';
+
+import 'package:find_catalogue/domain/find_record.dart';
+import 'package:find_catalogue/services/record_export_service.dart';
+import 'package:find_catalogue/services/sharing/find_share_card_generator.dart';
+import 'package:find_catalogue/services/sharing/find_share_workflow.dart';
+import 'package:find_catalogue/services/sharing/share_artifact.dart';
+import 'package:find_catalogue/services/sharing/share_dispatcher.dart';
+import 'package:find_catalogue/services/sharing/share_file_store.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as image;
+import 'package:share_plus/share_plus.dart';
+
+void main() {
+  test(
+    'four photos produce one card or one card plus photos two to four',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'find_share_workflow_',
+      );
+      try {
+        final second = await _writeGpsPhoto(
+          directory,
+          'second.jpg',
+          180,
+          30,
+          20,
+        );
+        final third = await _writeGpsPhoto(directory, 'third.jpg', 20, 180, 30);
+        final fourth = await _writeGpsPhoto(
+          directory,
+          'fourth.jpg',
+          20,
+          30,
+          180,
+        );
+        final originalBytes = {
+          second.path: await second.readAsBytes(),
+          third.path: await third.readAsBytes(),
+          fourth.path: await fourth.readAsBytes(),
+        };
+        final record = _record(
+          1,
+          photos: [
+            _photo(1, '${directory.path}/primary.jpg', 0, FindPhotoRole.front),
+            _photo(2, second.path, 1, FindPhotoRole.reverse),
+            _photo(3, third.path, 2, FindPhotoRole.edge),
+            _photo(4, fourth.path, 3, FindPhotoRole.detail),
+          ],
+        );
+        final workflow = _workflow(directory);
+
+        final cardOnly = await workflow.prepare([
+          record,
+        ], options: const FindShareOptions());
+        final withPhotos = await workflow.prepare([
+          record,
+        ], options: const FindShareOptions(includeAllPhotos: true));
+
+        expect(cardOnly.map((artifact) => artifact.fileName), [
+          '01_FO-000001_share_card.png',
+        ]);
+        expect(withPhotos.map((artifact) => artifact.fileName), [
+          '01_FO-000001_share_card.png',
+          '01_FO-000001_02_reverse_second.jpg',
+          '01_FO-000001_03_edge_third.jpg',
+          '01_FO-000001_04_detail_fourth.jpg',
+        ]);
+        for (final artifact in withPhotos.skip(1)) {
+          final decoded = image.decodeJpg(
+            await File(artifact.path).readAsBytes(),
+          )!;
+          expect(decoded.exif.gpsIfd.hasGPSLatitude, isFalse);
+          expect(decoded.exif.gpsIfd.hasGPSLongitude, isFalse);
+        }
+        for (final entry in originalBytes.entries) {
+          expect(await File(entry.key).readAsBytes(), entry.value);
+        }
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
+
+  test('exact additional-photo mode preserves source bytes', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_exact_',
+    );
+    try {
+      final additional = await _writeGpsPhoto(
+        directory,
+        'additional.jpg',
+        60,
+        120,
+        180,
+      );
+      final originalBytes = await additional.readAsBytes();
+      final artifacts = await _workflow(directory).prepare(
+        [
+          _record(
+            1,
+            photos: [
+              _photo(
+                1,
+                '${directory.path}/primary.jpg',
+                0,
+                FindPhotoRole.front,
+              ),
+              _photo(2, additional.path, 1, FindPhotoRole.reverse),
+            ],
+          ),
+        ],
+        options: const FindShareOptions(
+          includeAllPhotos: true,
+          findspotPrecision: FindspotExportPrecision.exact,
+        ),
+      );
+
+      expect(artifacts, hasLength(2));
+      expect(await File(artifacts[1].path).readAsBytes(), originalBytes);
+      expect(await additional.readAsBytes(), originalBytes);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('multiple records preserve record-by-record artifact order', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_order_',
+    );
+    try {
+      final firstAdditional = await _writeGpsPhoto(
+        directory,
+        'first_extra.jpg',
+        100,
+        80,
+        60,
+      );
+      final secondAdditional = await _writeGpsPhoto(
+        directory,
+        'second_extra.jpg',
+        60,
+        80,
+        100,
+      );
+      final records = [
+        _record(
+          7,
+          photos: [
+            _photo(1, 'primary_7.jpg', 0, FindPhotoRole.front),
+            _photo(2, firstAdditional.path, 1, FindPhotoRole.reverse),
+          ],
+        ),
+        _record(
+          3,
+          photos: [
+            _photo(3, 'primary_3.jpg', 0, FindPhotoRole.front),
+            _photo(4, secondAdditional.path, 1, FindPhotoRole.detail),
+          ],
+        ),
+      ];
+
+      final artifacts = await _workflow(directory).prepare(
+        records,
+        options: const FindShareOptions(includeAllPhotos: true),
+      );
+
+      expect(artifacts.map((artifact) => artifact.fileName), [
+        '01_FO-000007_share_card.png',
+        '01_FO-000007_02_reverse_first_extra.jpg',
+        '02_FO-000003_share_card.png',
+        '02_FO-000003_02_detail_second_extra.jpg',
+      ]);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('cancellation is observed between records', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_cancel_',
+    );
+    try {
+      final cancellationToken = FindShareCancellationToken();
+      final generator = _FakeCardGenerator(
+        onGenerated: (record) {
+          if (record.id == 1) cancellationToken.cancel();
+        },
+      );
+      final progress = <FindShareProgress>[];
+      final workflow = _workflow(directory, cardGenerator: generator);
+
+      await expectLater(
+        workflow.prepare(
+          [_record(1), _record(2)],
+          options: const FindShareOptions(),
+          cancellationToken: cancellationToken,
+          onProgress: progress.add,
+        ),
+        throwsA(isA<FindSharePreparationCancelled>()),
+      );
+
+      expect(generator.generatedIds, [1]);
+      expect(progress.any((item) => item.completedRecords == 1), isTrue);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('an unavailable additional photo fails visibly', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_missing_',
+    );
+    try {
+      final future = _workflow(directory).prepare([
+        _record(
+          1,
+          photos: [
+            _photo(1, 'primary.jpg', 0, FindPhotoRole.front),
+            _photo(2, 'missing.jpg', 1, FindPhotoRole.reverse),
+          ],
+        ),
+      ], options: const FindShareOptions(includeAllPhotos: true));
+
+      await expectLater(
+        future,
+        throwsA(
+          isA<FindSharePreparationException>().having(
+            (error) => error.message,
+            'message',
+            allOf(contains('FO-000001'), contains('unavailable')),
+          ),
+        ),
+      );
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('a corrupt hidden additional photo fails without changing it', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_corrupt_',
+    );
+    try {
+      final corrupt = File('${directory.path}/corrupt.jpg');
+      const originalBytes = [1, 2, 3, 4, 5];
+      await corrupt.writeAsBytes(originalBytes);
+
+      await expectLater(
+        _workflow(directory).prepare([
+          _record(
+            1,
+            photos: [
+              _photo(1, 'primary.jpg', 0, FindPhotoRole.front),
+              _photo(2, corrupt.path, 1, FindPhotoRole.reverse),
+            ],
+          ),
+        ], options: const FindShareOptions(includeAllPhotos: true)),
+        throwsA(
+          isA<FindSharePreparationException>().having(
+            (error) => error.message,
+            'message',
+            contains('metadata could not be removed safely'),
+          ),
+        ),
+      );
+      expect(await corrupt.readAsBytes(), originalBytes);
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('legacy formats map to the unchanged record exporters', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_legacy_',
+    );
+    try {
+      final exporter = _TrackingRecordExportService();
+      final fileStore = ShareFileStore(
+        temporaryDirectoryProvider: () async => directory,
+      );
+      final workflow = FindShareWorkflow(
+        cardGenerator: _FakeCardGenerator(),
+        recordExportService: exporter,
+        shareFileStore: fileStore,
+      );
+
+      for (final format in const [
+        FindShareFormat.pdf,
+        FindShareFormat.pdfPhotos,
+        FindShareFormat.csv,
+      ]) {
+        await workflow.prepare(
+          [_record(1)],
+          options: FindShareOptions(
+            format: format,
+            findspotPrecision: FindspotExportPrecision.exact,
+          ),
+        );
+      }
+
+      expect(exporter.formats, [
+        RecordExportFormat.pdf,
+        RecordExportFormat.pdfBundle,
+        RecordExportFormat.csv,
+      ]);
+      expect(exporter.precisions, everyElement(FindspotExportPrecision.exact));
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+
+  test('prepared artifacts are dispatched together in their order', () async {
+    ShareParams? captured;
+    final directory = await Directory.systemTemp.createTemp(
+      'find_share_workflow_dispatch_',
+    );
+    try {
+      final workflow = _workflow(
+        directory,
+        shareDispatcher: ShareDispatcher(
+          shareInvoker: (parameters) async {
+            captured = parameters;
+            return const ShareResult('test', ShareResultStatus.success);
+          },
+        ),
+      );
+      const artifacts = [
+        ShareArtifact(
+          path: '/tmp/first.png',
+          fileName: 'first.png',
+          mimeType: 'image/png',
+        ),
+        ShareArtifact(
+          path: '/tmp/second.jpg',
+          fileName: 'second.jpg',
+          mimeType: 'image/jpeg',
+        ),
+      ];
+
+      await workflow.dispatch(
+        artifacts,
+        records: [_record(1)],
+        options: const FindShareOptions(includeAllPhotos: true),
+      );
+
+      expect(captured!.files!.map((file) => file.name), [
+        'first.png',
+        'second.jpg',
+      ]);
+      expect(captured!.subject, 'Find Catalogue Share Cards');
+    } finally {
+      await directory.delete(recursive: true);
+    }
+  });
+}
+
+FindShareWorkflow _workflow(
+  Directory directory, {
+  FindShareCardGenerator? cardGenerator,
+  ShareDispatcher? shareDispatcher,
+}) {
+  final fileStore = ShareFileStore(
+    temporaryDirectoryProvider: () async => directory,
+  );
+  return FindShareWorkflow(
+    cardGenerator: cardGenerator ?? _FakeCardGenerator(),
+    shareDispatcher: shareDispatcher,
+    shareFileStore: fileStore,
+  );
+}
+
+class _FakeCardGenerator extends FindShareCardGenerator {
+  _FakeCardGenerator({this.onGenerated});
+
+  final void Function(FindRecord record)? onGenerated;
+  final generatedIds = <int>[];
+
+  @override
+  Future<ShareArtifact> generateToSession(
+    FindRecord record, {
+    required ShareFileSession session,
+    required int sequence,
+  }) async {
+    generatedIds.add(record.id);
+    onGenerated?.call(record);
+    return session.writeArtifact(
+      fileName:
+          '${sequence.toString().padLeft(2, '0')}_${record.logNumber}_share_card.png',
+      mimeType: 'image/png',
+      bytes: [record.id],
+    );
+  }
+}
+
+class _TrackingRecordExportService extends RecordExportService {
+  final formats = <RecordExportFormat>[];
+  final precisions = <FindspotExportPrecision>[];
+
+  @override
+  Future<ShareArtifact> prepareShareArtifact(
+    List<FindRecord> records, {
+    required RecordExportFormat format,
+    required FindspotExportPrecision findspotPrecision,
+  }) async {
+    formats.add(format);
+    precisions.add(findspotPrecision);
+    return ShareArtifact(
+      path: '/tmp/export.${format.name}',
+      fileName: 'export.${format.name}',
+      mimeType: 'application/octet-stream',
+    );
+  }
+}
+
+Future<File> _writeGpsPhoto(
+  Directory directory,
+  String name,
+  int red,
+  int green,
+  int blue,
+) async {
+  final source = image.Image(width: 8, height: 6);
+  image.fill(source, color: image.ColorRgb8(red, green, blue));
+  source.exif.gpsIfd.setGpsLocation(latitude: 51.123456, longitude: -1.234567);
+  final file = File('${directory.path}/$name');
+  await file.writeAsBytes(image.encodeJpg(source, quality: 100));
+  return file;
+}
+
+FindPhoto _photo(int id, String path, int sortOrder, FindPhotoRole role) =>
+    FindPhoto(
+      id: id,
+      path: path,
+      role: role,
+      source: FindPhotoSource.camera,
+      createdAt: DateTime(2026, 8, 20),
+      isOriginalEvidence: true,
+      sortOrder: sortOrder,
+    );
+
+FindRecord _record(int id, {List<FindPhoto> photos = const []}) {
+  final now = DateTime(2026, 8, 30, 12);
+  return FindRecord(
+    id: id,
+    logNumber: 'FO-${id.toString().padLeft(6, '0')}',
+    method: FindRecordMethod.manual,
+    createdAt: now,
+    updatedAt: now,
+    discoveredAt: DateTime(2026, 8, 20),
+    discoveryDateSource: FieldSource.manuallyEntered,
+    discoveryDateApproximate: false,
+    location: null,
+    preferredIdentification: 'Test find',
+    material: 'Copper alloy',
+    confidence: IdentificationConfidence.probable,
+    timelineFromYear: 1200,
+    timelineToYear: 1400,
+    lengthMm: 20,
+    widthMm: 14,
+    heightMm: null,
+    diameterMm: null,
+    thicknessMm: 2,
+    weightG: 8.5,
+    observations: 'Test observation.',
+    researchNotes: '',
+    sources: '',
+    storageLocation: '',
+    photos: photos,
+  );
+}

@@ -142,6 +142,7 @@ void main() {
       expect(find.text(FindShareCardData.appName), findsOneWidget);
       expect(find.text(FindShareCardData.privacyLabel), findsOneWidget);
       expect(find.byType(Image), findsOneWidget);
+      expect(find.byIcon(Icons.auto_awesome_outlined), findsNothing);
       final title = tester.widget<Text>(find.text(longTitle));
       expect(title.maxLines, 2);
       expect(title.overflow, TextOverflow.ellipsis);

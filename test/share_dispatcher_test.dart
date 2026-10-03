@@ -57,4 +57,43 @@ void main() {
 
     expect(dispatcher.dispatch(artifacts: const []), throwsArgumentError);
   });
+
+  test('dispatcher reports an unavailable share target', () {
+    final dispatcher = ShareDispatcher(
+      shareInvoker: (_) async => ShareResult.unavailable,
+    );
+
+    expect(
+      dispatcher.dispatch(
+        artifacts: const [
+          ShareArtifact(
+            path: '/temporary/card.png',
+            fileName: 'card.png',
+            mimeType: 'image/png',
+          ),
+        ],
+      ),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+  test(
+    'dispatcher treats native share-sheet dismissal as cancellation',
+    () async {
+      final dispatcher = ShareDispatcher(
+        shareInvoker: (_) async =>
+            const ShareResult('dismissed', ShareResultStatus.dismissed),
+      );
+
+      await dispatcher.dispatch(
+        artifacts: const [
+          ShareArtifact(
+            path: '/temporary/card.png',
+            fileName: 'card.png',
+            mimeType: 'image/png',
+          ),
+        ],
+      );
+    },
+  );
 }

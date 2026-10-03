@@ -161,12 +161,6 @@ class _BrandHeader extends StatelessWidget {
                 letterSpacing: 0.1,
               ),
             ),
-            const Spacer(),
-            const Icon(
-              Icons.auto_awesome_outlined,
-              color: FindShareCard._olive,
-              size: 17,
-            ),
           ],
         ),
       ),

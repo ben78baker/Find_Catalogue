@@ -1,0 +1,1 @@
+enum FindspotExportPrecision { hidden, exact }

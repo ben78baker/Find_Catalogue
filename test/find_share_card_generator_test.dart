@@ -171,6 +171,8 @@ void main() {
     if (outputPath == null || outputPath.isEmpty) return;
     final fontDirectory =
         Platform.environment['FIND_SHARE_CARD_PREVIEW_FONT_DIRECTORY'];
+    final suppliedPhotoPath =
+        Platform.environment['FIND_SHARE_CARD_PREVIEW_PHOTO_PATH'];
 
     await tester.runAsync(() async {
       if (fontDirectory != null && fontDirectory.isNotEmpty) {
@@ -180,8 +182,14 @@ void main() {
         'find_share_card_preview_',
       );
       try {
-        final hero = File('${directory.path}/preview_hero.jpg');
-        await hero.writeAsBytes(image.encodeJpg(_previewHero(), quality: 94));
+        final hasSuppliedPhoto =
+            suppliedPhotoPath != null && suppliedPhotoPath.isNotEmpty;
+        final hero = hasSuppliedPhoto
+            ? File(suppliedPhotoPath)
+            : File('${directory.path}/preview_hero.jpg');
+        if (!hasSuppliedPhoto) {
+          await hero.writeAsBytes(image.encodeJpg(_previewHero(), quality: 94));
+        }
         final artifact =
             await _generator(
               directory,
@@ -191,9 +199,12 @@ void main() {
             ).generateOne(
               _record(
                 42,
-                identification: 'Medieval copper-alloy harness pendant',
-                observations:
-                    'A small gilded pendant with surviving punched decoration and a complete suspension loop.',
+                identification: hasSuppliedPhoto
+                    ? 'Copper-alloy coin'
+                    : 'Medieval copper-alloy harness pendant',
+                observations: hasSuppliedPhoto
+                    ? 'Surface detail and green patina are visible under angled light.'
+                    : 'A small gilded pendant with surviving punched decoration and a complete suspension loop.',
                 photos: [_photo(1, hero.path, 0)],
               ),
             );
