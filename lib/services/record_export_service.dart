@@ -6,19 +6,29 @@ import 'package:archive/archive.dart';
 import 'package:flutter/material.dart' show Rect;
 import 'package:image/image.dart' as image;
 import 'package:path/path.dart' as path;
-import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:share_plus/share_plus.dart';
 
 import '../domain/find_record.dart';
 import '../ui/formatters.dart';
+import 'sharing/share_artifact.dart';
+import 'sharing/share_dispatcher.dart';
+import 'sharing/share_file_store.dart';
 
 enum RecordExportFormat { csv, pdf, pdfBundle }
 
 enum FindspotExportPrecision { hidden, exact }
 
 class RecordExportService {
+  RecordExportService({
+    ShareDispatcher? shareDispatcher,
+    ShareFileStore? shareFileStore,
+  }) : _shareDispatcher = shareDispatcher ?? ShareDispatcher(),
+       _shareFileStore = shareFileStore ?? ShareFileStore();
+
+  final ShareDispatcher _shareDispatcher;
+  final ShareFileStore _shareFileStore;
+
   String buildCsv(
     List<FindRecord> records, {
     required FindspotExportPrecision findspotPrecision,
@@ -292,51 +302,56 @@ class RecordExportService {
     required FindspotExportPrecision findspotPrecision,
     Rect? sharePositionOrigin,
   }) async {
+    final artifact = await prepareShareArtifact(
+      records,
+      format: format,
+      findspotPrecision: findspotPrecision,
+    );
+
+    await _shareDispatcher.dispatch(
+      artifacts: [artifact],
+      subject: format == RecordExportFormat.pdfBundle
+          ? 'Find Catalogue records and photographs'
+          : 'Find Catalogue records',
+      text:
+          '${records.length} shared find record${records.length == 1 ? '' : 's'}.',
+      sharePositionOrigin: sharePositionOrigin,
+    );
+  }
+
+  Future<ShareArtifact> prepareShareArtifact(
+    List<FindRecord> records, {
+    required RecordExportFormat format,
+    required FindspotExportPrecision findspotPrecision,
+  }) async {
     if (records.isEmpty) {
       throw ArgumentError('At least one record is required.');
     }
-    final directory = await getTemporaryDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     final extension = switch (format) {
       RecordExportFormat.csv => 'csv',
       RecordExportFormat.pdf => 'pdf',
       RecordExportFormat.pdfBundle => 'zip',
     };
-    final file = File('${directory.path}/find_records_$timestamp.$extension');
+    final mimeType = switch (format) {
+      RecordExportFormat.csv => 'text/csv',
+      RecordExportFormat.pdf => 'application/pdf',
+      RecordExportFormat.pdfBundle => 'application/zip',
+    };
+    late final List<int> bytes;
     if (format == RecordExportFormat.csv) {
       final csv = buildCsv(records, findspotPrecision: findspotPrecision);
-      await file.writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(csv)]);
+      bytes = [0xEF, 0xBB, 0xBF, ...utf8.encode(csv)];
     } else if (format == RecordExportFormat.pdf) {
-      await file.writeAsBytes(
-        await buildPdf(records, findspotPrecision: findspotPrecision),
-      );
+      bytes = await buildPdf(records, findspotPrecision: findspotPrecision);
     } else {
-      await file.writeAsBytes(
-        await buildBundle(records, findspotPrecision: findspotPrecision),
-      );
+      bytes = await buildBundle(records, findspotPrecision: findspotPrecision);
     }
 
-    await SharePlus.instance.share(
-      ShareParams(
-        subject: format == RecordExportFormat.pdfBundle
-            ? 'Find Catalogue records and photographs'
-            : 'Find Catalogue records',
-        text:
-            '${records.length} shared find record${records.length == 1 ? '' : 's'}.',
-        files: [
-          XFile(
-            file.path,
-            name: file.uri.pathSegments.last,
-            mimeType: switch (format) {
-              RecordExportFormat.csv => 'text/csv',
-              RecordExportFormat.pdf => 'application/pdf',
-              RecordExportFormat.pdfBundle => 'application/zip',
-            },
-          ),
-        ],
-        sharePositionOrigin:
-            sharePositionOrigin ?? const Rect.fromLTWH(0, 0, 1, 1),
-      ),
+    return _shareFileStore.writeArtifact(
+      fileName: 'find_records_$timestamp.$extension',
+      mimeType: mimeType,
+      bytes: bytes,
     );
   }
 

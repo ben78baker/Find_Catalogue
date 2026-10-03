@@ -4,8 +4,11 @@ import 'dart:io';
 import 'package:archive/archive.dart';
 import 'package:find_catalogue/domain/find_record.dart';
 import 'package:find_catalogue/services/record_export_service.dart';
+import 'package:find_catalogue/services/sharing/share_dispatcher.dart';
+import 'package:find_catalogue/services/sharing/share_file_store.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as image;
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   final exporter = RecordExportService();
@@ -138,6 +141,47 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test(
+    'share delegates a prepared artifact to an injected dispatcher',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'find_catalogue_share_',
+      );
+      try {
+        ShareParams? captured;
+        final exporter = RecordExportService(
+          shareDispatcher: ShareDispatcher(
+            shareInvoker: (parameters) async {
+              captured = parameters;
+              return const ShareResult('test', ShareResultStatus.success);
+            },
+          ),
+          shareFileStore: ShareFileStore(
+            temporaryDirectoryProvider: () async => directory,
+          ),
+        );
+
+        await exporter.share(
+          [_record(1)],
+          format: RecordExportFormat.csv,
+          findspotPrecision: FindspotExportPrecision.hidden,
+        );
+
+        expect(captured, isNotNull);
+        expect(captured!.files, hasLength(1));
+        final file = File(captured!.files!.single.path);
+        expect(file.path, startsWith(directory.path));
+        expect(file.path, endsWith('.csv'));
+        expect((await file.readAsBytes()).take(3), [0xEF, 0xBB, 0xBF]);
+        expect(captured!.files!.single.mimeType, 'text/csv');
+        expect(captured!.subject, 'Find Catalogue records');
+        expect(captured!.text, '1 shared find record.');
+      } finally {
+        await directory.delete(recursive: true);
+      }
+    },
+  );
 }
 
 FindPhoto _photo(String photoPath) => FindPhoto(
