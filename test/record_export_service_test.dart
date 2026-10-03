@@ -11,6 +11,7 @@ import 'package:image/image.dart' as image;
 import 'package:share_plus/share_plus.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final exporter = RecordExportService();
 
   test('CSV exports multiple records and escapes editable text', () {
@@ -67,6 +68,53 @@ void main() {
 
     expect(_pdfPageCount(firstPageBytes), 1);
     expect(_pdfPageCount(overflowBytes), greaterThan(1));
+  });
+
+  test('Summary and Full Record PDF exports produce valid documents', () async {
+    final summary = await exporter.buildSummaryPdf([
+      _record(1),
+      _record(2),
+    ], findspotPrecision: FindspotExportPrecision.hidden);
+    final full = await exporter.buildFullRecordPdf([
+      _record(1),
+      _record(2),
+    ], findspotPrecision: FindspotExportPrecision.hidden);
+
+    expect(utf8.decode(summary.take(4).toList()), '%PDF');
+    expect(utf8.decode(full.take(4).toList()), '%PDF');
+    expect(summary.length, greaterThan(1000));
+    expect(full.length, greaterThan(1000));
+  });
+
+  test('new PDF artifacts use descriptive stable filenames', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'find_catalogue_pdf_names_',
+    );
+    try {
+      final exporter = RecordExportService(
+        shareFileStore: ShareFileStore(
+          temporaryDirectoryProvider: () async => directory,
+        ),
+      );
+
+      final summary = await exporter.prepareShareArtifact(
+        [_record(1)],
+        format: RecordExportFormat.pdfSummary,
+        findspotPrecision: FindspotExportPrecision.hidden,
+      );
+      final full = await exporter.prepareShareArtifact(
+        [_record(1), _record(2)],
+        format: RecordExportFormat.pdfFullRecord,
+        findspotPrecision: FindspotExportPrecision.hidden,
+      );
+
+      expect(summary.fileName, 'Find_Catalogue_FO-000001_Summary.pdf');
+      expect(full.fileName, 'Find_Catalogue_2_Records_Full_Record.pdf');
+      expect(summary.mimeType, 'application/pdf');
+      expect(full.mimeType, 'application/pdf');
+    } finally {
+      await directory.delete(recursive: true);
+    }
   });
 
   test('hidden-location bundle strips photo GPS metadata', () async {

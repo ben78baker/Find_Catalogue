@@ -9,6 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 import '../domain/find_record.dart';
 import '../ui/formatters.dart';
+import 'sharing/find_pdf_generator.dart';
 import 'sharing/findspot_export_precision.dart';
 import 'sharing/share_artifact.dart';
 import 'sharing/share_dispatcher.dart';
@@ -17,21 +18,24 @@ import 'sharing/share_photo_processor.dart';
 
 export 'sharing/findspot_export_precision.dart';
 
-enum RecordExportFormat { csv, pdf, pdfBundle }
+enum RecordExportFormat { csv, pdf, pdfSummary, pdfFullRecord, pdfBundle }
 
 class RecordExportService {
   RecordExportService({
     ShareDispatcher? shareDispatcher,
     ShareFileStore? shareFileStore,
     SharePhotoProcessor? sharePhotoProcessor,
+    FindPdfGenerator? findPdfGenerator,
   }) : _shareDispatcher = shareDispatcher ?? ShareDispatcher(),
        _shareFileStore = shareFileStore ?? ShareFileStore(),
        _sharePhotoProcessor =
-           sharePhotoProcessor ?? const SharePhotoProcessor();
+           sharePhotoProcessor ?? const SharePhotoProcessor(),
+       _findPdfGenerator = findPdfGenerator ?? FindPdfGenerator();
 
   final ShareDispatcher _shareDispatcher;
   final ShareFileStore _shareFileStore;
   final SharePhotoProcessor _sharePhotoProcessor;
+  final FindPdfGenerator _findPdfGenerator;
 
   String buildCsv(
     List<FindRecord> records, {
@@ -191,6 +195,26 @@ class RecordExportService {
     return document.save();
   }
 
+  Future<Uint8List> buildSummaryPdf(
+    List<FindRecord> records, {
+    required FindspotExportPrecision findspotPrecision,
+    bool compress = true,
+  }) => _findPdfGenerator.buildSummary(
+    records,
+    findspotPrecision: findspotPrecision,
+    compress: compress,
+  );
+
+  Future<Uint8List> buildFullRecordPdf(
+    List<FindRecord> records, {
+    required FindspotExportPrecision findspotPrecision,
+    bool compress = true,
+  }) => _findPdfGenerator.buildFullRecord(
+    records,
+    findspotPrecision: findspotPrecision,
+    compress: compress,
+  );
+
   Future<Uint8List> buildBundle(
     List<FindRecord> records, {
     required FindspotExportPrecision findspotPrecision,
@@ -324,12 +348,16 @@ class RecordExportService {
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
     final extension = switch (format) {
       RecordExportFormat.csv => 'csv',
-      RecordExportFormat.pdf => 'pdf',
+      RecordExportFormat.pdf ||
+      RecordExportFormat.pdfSummary ||
+      RecordExportFormat.pdfFullRecord => 'pdf',
       RecordExportFormat.pdfBundle => 'zip',
     };
     final mimeType = switch (format) {
       RecordExportFormat.csv => 'text/csv',
-      RecordExportFormat.pdf => 'application/pdf',
+      RecordExportFormat.pdf ||
+      RecordExportFormat.pdfSummary ||
+      RecordExportFormat.pdfFullRecord => 'application/pdf',
       RecordExportFormat.pdfBundle => 'application/zip',
     };
     late final List<int> bytes;
@@ -338,12 +366,22 @@ class RecordExportService {
       bytes = [0xEF, 0xBB, 0xBF, ...utf8.encode(csv)];
     } else if (format == RecordExportFormat.pdf) {
       bytes = await buildPdf(records, findspotPrecision: findspotPrecision);
+    } else if (format == RecordExportFormat.pdfSummary) {
+      bytes = await buildSummaryPdf(
+        records,
+        findspotPrecision: findspotPrecision,
+      );
+    } else if (format == RecordExportFormat.pdfFullRecord) {
+      bytes = await buildFullRecordPdf(
+        records,
+        findspotPrecision: findspotPrecision,
+      );
     } else {
       bytes = await buildBundle(records, findspotPrecision: findspotPrecision);
     }
 
     return _shareFileStore.writeArtifact(
-      fileName: 'find_records_$timestamp.$extension',
+      fileName: _artifactFileName(records, format, timestamp, extension),
       mimeType: mimeType,
       bytes: bytes,
     );
@@ -434,5 +472,23 @@ class RecordExportService {
         .trim()
         .replaceAll(RegExp(r'\s+'), '_');
     return safe.isEmpty ? 'photo' : safe;
+  }
+
+  String _artifactFileName(
+    List<FindRecord> records,
+    RecordExportFormat format,
+    String timestamp,
+    String extension,
+  ) {
+    final descriptor = switch (format) {
+      RecordExportFormat.pdfSummary => 'Summary',
+      RecordExportFormat.pdfFullRecord => 'Full_Record',
+      _ => null,
+    };
+    if (descriptor == null) return 'find_records_$timestamp.$extension';
+    final recordPart = records.length == 1
+        ? _safeFileName(records.single.logNumber)
+        : '${records.length}_Records';
+    return 'Find_Catalogue_${recordPart}_$descriptor.$extension';
   }
 }
