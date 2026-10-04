@@ -27,7 +27,7 @@ The first working vertical slice is implemented:
 - basic identification, material, confidence, interpreted timeline, measurements, observations, research notes, sources, and storage fields are available;
 - records with locations can be viewed individually or as the current searched/filtered result set on a map;
 - manual records can be positioned on the map;
-- one record or the current result set can be shared as CSV, PDF, or a PDF-and-photos ZIP bundle, with exact locations either deliberately included or hidden.
+- one record or the current result set can be shared as a privacy-safe Share Card, PDF Summary, PDF Full Record, or CSV; document formats require a deliberate hidden-or-exact findspot choice.
 
 Portable backup/restore, research revision history, labels, and QR codes remain later release slices.
 

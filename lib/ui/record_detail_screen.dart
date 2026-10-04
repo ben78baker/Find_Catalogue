@@ -9,7 +9,6 @@ import '../services/location_capture_service.dart';
 import '../services/photo_capture_service.dart';
 import 'find_map_screen.dart';
 import 'formatters.dart';
-import 'export_records.dart';
 import 'record_editor_screen.dart';
 import 'share_records.dart';
 
@@ -87,13 +86,6 @@ class RecordDetailScreen extends StatelessWidget {
                   tooltip: 'Share record',
                   onPressed: () => shareFindRecords(context, [record]),
                   icon: const Icon(Icons.ios_share),
-                ),
-              if (record != null)
-                IconButton(
-                  key: const Key('export_record_button'),
-                  tooltip: 'Export record',
-                  onPressed: () => exportFindRecords(context, [record]),
-                  icon: const Icon(Icons.file_download_outlined),
                 ),
               if (record != null)
                 TextButton.icon(

@@ -91,9 +91,9 @@ The QR target must work locally and must not encode exact coordinates or other s
 
 ## Privacy model
 
-The private record can retain exact coordinates, landowner details, permission documents, and precise field information. Sharing and export are separate actions.
+The private record can retain exact coordinates, landowner details, permission documents, and precise field information. Sharing is always a deliberate action.
 
-Structured record exports must offer an explicit findspot precision, for example:
+Structured files shared from the app must offer an explicit findspot precision, for example:
 
 - hidden;
 - county or broad area;
@@ -107,7 +107,7 @@ A Share Card is a self-contained, privacy-safe image: it always omits exact find
 
 CSV, PDF Summary, and PDF Full Record sharing may be started from one record or from the records list. List sharing operates on the current search and filters, with an optional discovery-date range, so unrelated private records are not included accidentally. PDF photographs are decoded and re-encoded for the document, so embedded source EXIF and GPS metadata are not retained; visible exact coordinates appear only when the user explicitly chooses exact findspots.
 
-Export is the separate archive/data route. It offers CSV and the existing PDF-and-photos ZIP bundle. The bundle contains the formatted report at its root and saveable photographs grouped into folders by permanent log number. It is the dependable way to deliver separately accessible image files without relying on viewer-specific PDF attachment support. When exact locations are included, the bundle preserves untouched originals. When locations are hidden, it instead re-encodes supported photos without embedded metadata (including GPS); a photo that cannot be sanitised safely is omitted and named in the bundle manifest.
+The Share action is the single user-facing route for sending catalogue information. It offers Share Card, PDF Summary, PDF Full Record, and CSV without a separate Export action. Share Card is always location-safe. The document formats default to hidden findspots and require an explicit choice before exact coordinates are included.
 
 ## Data ownership and resilience
 
@@ -115,7 +115,7 @@ Export is the separate archive/data route. It offers CSV and the existing PDF-an
 - All essential functions work offline.
 - Backups include the database, original photographs, derivatives needed for display, and a manifest describing versions and checksums.
 - Media references stored in the database are portable paths relative to the app's documents directory, so an iOS sandbox-path change after an update does not detach records from their photographs.
-- Export should include an open tabular format for core records plus a documented media folder structure.
+- Sharing includes an open tabular CSV format for core records. A future complete backup/restore format should use a documented, portable media structure rather than overloading the Share workflow.
 - Restore must be tested and must never silently replace an existing catalogue.
 - Permanent log numbers are never reused after deletion or record merging.
 - Record coordinates and catalogue search results remain local. Interactive base-map tiles are requested from OpenStreetMap only when a user opens a map. A map place-search query is sent to the configured geocoding provider only when the user explicitly submits it. Visible attribution and each provider's caching and usage requirements must be respected. Coordinate entry and the underlying catalogue continue to work without maps or geocoding.
@@ -125,7 +125,7 @@ Export is the separate archive/data route. It offers CSV and the existing PDF-an
 1. Create and retrieve either an instant or retrospective discovery from a photograph, discovery evidence, and allocated log number.
 2. Browse in date order, search across all stored fields, filter, open, and deliberately edit object details; attach additional photographs.
 3. Record preferred and alternative identifications with confidence, evidence, sources, and revision history.
-4. Export and restore a complete portable archive.
+4. Add and test a complete portable backup and restore archive as a distinct resilience workflow.
 5. Create private-safe PDF labels and QR codes.
 6. Add session, PAS/FLO, and richer reporting functions only after the catalogue foundation is reliable.
 

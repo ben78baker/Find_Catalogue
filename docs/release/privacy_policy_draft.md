@@ -40,9 +40,9 @@ The app’s catalogue and coordinate entry continue to work without opening an i
 
 If you explicitly submit a place, postcode or address in the map search field, that search text is sent to OpenStreetMap's Nominatim geocoding service together with normal connection information such as your IP address and application identifier. Typing without submitting does not send a geocoding request. The query is used to return a map location and is not added to your catalogue by Find Catalogue.
 
-## Sharing and exports
+## Sharing
 
-The app shares information only when you start an export and choose a destination through the device’s share interface. Before an export is created, you choose whether exact coordinates are hidden or included. When a photo bundle hides locations, supported photographs are re-encoded without embedded metadata; a file that cannot be sanitised safely is omitted and identified in the bundle manifest.
+The app shares information only when you use Share and choose a destination through the device’s share interface. Share Cards never include exact findspots. Before a CSV or PDF is created, you choose whether exact coordinates are hidden or included. Photographs placed in Share Cards and PDFs are decoded and re-encoded for those generated files, so source EXIF and GPS metadata are not carried into them.
 
 After you share a file, the receiving person, app or service processes it under their own terms and privacy practices.
 

@@ -554,7 +554,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Map (2)'), findsOneWidget);
     expect(find.byKey(const Key('share_record_list_button')), findsOneWidget);
-    expect(find.byKey(const Key('export_record_list_button')), findsOneWidget);
+    expect(find.byKey(const Key('export_record_list_button')), findsNothing);
 
     await tester.enterText(
       find.byKey(const Key('record_search_field')),
@@ -567,7 +567,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('FO-000001'), findsOneWidget);
     expect(find.byKey(const Key('share_record_button')), findsOneWidget);
-    expect(find.byKey(const Key('export_record_button')), findsOneWidget);
+    expect(find.byKey(const Key('export_record_button')), findsNothing);
     await tester.scrollUntilVisible(
       find.byKey(const Key('view_record_map_button')),
       240,

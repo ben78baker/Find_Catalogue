@@ -32,8 +32,8 @@ Key features:
 • Permanent sequential catalogue numbers
 • Search and filters across the complete catalogue
 • Individual and result-set map views
-• CSV and PDF sharing
-• PDF-and-photos ZIP bundles with saveable images
+• Privacy-safe Share Cards
+• PDF Summary, PDF Full Record and CSV sharing
 • Explicit control over whether shared files include exact coordinates
 
 Your catalogue is stored locally without an account, advertising or analytics. Core record keeping works offline. Interactive map tiles require a network connection and are loaded from OpenStreetMap only when you open a map.
@@ -46,7 +46,7 @@ Whether you are recording coins, buttons, fittings, tools, fragments or objects 
 
 ## What’s New — version 1.0.0
 
-The first release of Find Catalogue: capture and create find records, preserve photographs and coordinates locally, search and filter the catalogue, view findspots on a map, and share selected records as private-safe CSV, PDF or photo bundles.
+The first release of Find Catalogue: capture and create find records, preserve photographs and coordinates locally, search and filter the catalogue, view findspots on a map, and share selected records as privacy-safe cards, PDF or CSV files.
 
 ## App Review notes
 
